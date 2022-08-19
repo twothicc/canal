@@ -1,0 +1,5 @@
+package canalmanager
+
+const (
+	WILDCARD = "*"
+)
