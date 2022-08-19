@@ -13,20 +13,22 @@ type SourceConfig struct {
 }
 
 type DbConfig struct {
-	DbAddr    string `toml:"addr"`
-	DbUser    string `toml:"user"`
-	DbPass    string `toml:"pass"`
-	DbCharset string `toml:"charset"`
-	DbFlavor  string `toml:"flavor"`
+	Addr    string `toml:"addr"`
+	User    string `toml:"user"`
+	Pass    string `toml:"pass"`
+	Charset string `toml:"charset"`
+	Flavor  string `toml:"flavor"`
+}
+
+type DumpConfig struct {
+	DumpExecPath string `toml:"mysqldump_path"`
 }
 
 type Config struct {
-	DbConfig DbConfig `toml:"database"`
-
-	ServerId     uint32 `toml:"server_id"`
-	DumpExecPath string `toml:"dump.mysqldump_path"`
-
-	Sources []SourceConfig `toml:"source"`
+	DbConfig   DbConfig       `toml:"database"`
+	ServerId   uint32         `toml:"server_id"`
+	DumpConfig DumpConfig     `toml:"dump"`
+	Sources    []SourceConfig `toml:"source"`
 }
 
 func NewConfig(path string) (*Config, error) {
