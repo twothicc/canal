@@ -45,17 +45,19 @@ func NewCanalManager(ctx context.Context, cfg *config.Config) (CanalManager, err
 		return nil, ErrConfig.New(fmt.Sprintf("[CanalManager.InitCanal]%s", err.Error()))
 	}
 
-	if err = parseSource(ctx, cfg); err != nil {
+	manager := &canalManager{
+		canal: newCanal,
+	}
+
+	if err = manager.parseSource(ctx, cfg); err != nil {
 		return nil, err
 	}
 
-	return &canalManager{
-		canal: newCanal,
-	}, nil
+	return manager, nil
 }
 
 func (cm *canalManager) Run(ctx context.Context) error {
-	returncm.canal.Run()
+	return cm.canal.Run()
 }
 
 func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) error {
