@@ -10,14 +10,14 @@ import (
 )
 
 type CanalManager interface {
-	PrepareAndRun(ctx context.Context)
+	Run(ctx context.Context) error
 }
 
 type canalManager struct {
 	canal *canal.Canal
 }
 
-func NewCanalManager(_ context.Context, cfg *config.Config) (CanalManager, error) {
+func NewCanalManager(ctx context.Context, cfg *config.Config) (CanalManager, error) {
 	canalCfg := canal.NewDefaultConfig()
 
 	dbCfg := cfg.DbConfig
@@ -45,16 +45,20 @@ func NewCanalManager(_ context.Context, cfg *config.Config) (CanalManager, error
 		return nil, ErrConfig.New(fmt.Sprintf("[CanalManager.InitCanal]%s", err.Error()))
 	}
 
+	if err = parseSource(ctx, cfg); err != nil {
+		return nil, err
+	}
+
 	return &canalManager{
 		canal: newCanal,
 	}, nil
 }
 
-func (cm *canalManager) PrepareAndRun(ctx context.Context) {
-	return
+func (cm *canalManager) Run(ctx context.Context) error {
+	returncm.canal.Run()
 }
 
-func (cm *canalManager) prepare(ctx context.Context, cfg *config.Config) error {
+func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) error {
 	wildCardTables := make(map[string][]string, len(cfg.Sources))
 
 	for _, source := range cfg.Sources {
@@ -69,6 +73,30 @@ func (cm *canalManager) prepare(ctx context.Context, cfg *config.Config) error {
 				if _, ok := wildCardTables[key]; ok {
 					return ErrConfig.New(fmt.Sprintf("[CanalManager.prepare]duplicate wildcard table %s", key))
 				}
+
+				tableParam := table
+				if table == WILDCARD {
+					tableParam = ANY_TABLE
+				}
+
+				res, err := cm.canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
+				if err != nil {
+					return ErrQuery.New(fmt.Sprintf("[CanalManager.prepare]%s", err.Error()))
+				}
+
+				tables := []string{}
+
+				for rowNum := 0; rowNum < res.Resultset.RowNumber(); rowNum++ {
+					tableName, _ := res.GetString(rowNum, 0)
+
+					tables = append(tables, tableName)
+				}
+
+				cm.canal.AddDumpTables(source.Schema, tables...)
+
+				wildCardTables[key] = tables
+			} else {
+				cm.canal.AddDumpTables(source.Schema, table)
 			}
 		}
 	}
@@ -89,5 +117,5 @@ func isValidTable(tables []string) bool {
 }
 
 func sourceKey(schema string, table string) string {
-	return strings.to
+	return fmt.Sprintf(SOURCE_KEY_FORMAT, schema, table)
 }

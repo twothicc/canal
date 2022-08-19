@@ -8,4 +8,5 @@ const pkg = "domain/entity/canalmanager"
 
 var (
 	ErrConfig = errortype.ErrorType{Code: 1, Pkg: pkg}
+	ErrQuery  = errortype.ErrorType{Code: 2, Pkg: pkg}
 )
