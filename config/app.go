@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/BurntSushi/toml"
 )
@@ -15,7 +15,6 @@ type SourceConfig struct {
 type DbConfig struct {
 	Addr    string `toml:"addr"`
 	User    string `toml:"user"`
-	Pass    string `toml:"pass"`
 	Charset string `toml:"charset"`
 	Flavor  string `toml:"flavor"`
 }
@@ -32,7 +31,7 @@ type Config struct {
 }
 
 func NewConfig(path string) (*Config, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, ErrNotFound.New(fmt.Sprintf("[NewConfig]%s", err.Error()))
 	}

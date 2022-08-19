@@ -5,12 +5,11 @@ server_id = 1001
 [database]
 addr = "localhost:3306"
 user = "test"
-pass = "test1234."
 charset = "utf8mb4"
 flavor = "mysql"
 
 [dump]
-mysqldump_path = "mysqldump"
+mysqldump_path = "/mnt/c/Program Files/MySQL/MySQL Server 8.0/bin/mysqldump.exe"
 
 [[source]]
 schema = "test"
