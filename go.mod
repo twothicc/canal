@@ -3,6 +3,7 @@ module github.com/twothicc/canal
 go 1.18
 
 require (
+	github.com/BurntSushi/toml v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -18,6 +19,7 @@ require (
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/twothicc/common-go/commonerror v0.0.0-20220815084053-2bc49f4b1954 // indirect
+	github.com/twothicc/common-go/errortype v0.0.0-20220819023926-2c223d249805 // indirect
 	github.com/twothicc/common-go/grpcclient v0.0.0-20220815101255-e77050aa7780 // indirect
 	github.com/twothicc/common-go/logger v0.0.0-20220815095443-75a5d558c1d5 // indirect
 	github.com/twothicc/protobuf v0.0.0-20220807084701-bd8888fe1ec0 // indirect

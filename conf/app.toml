@@ -1,0 +1,17 @@
+# This is a TOML document
+
+server_id = 1001
+
+[database]
+addr = "localhost:3306"
+user = "test"
+pass = "test1234."
+charset = "utf8mb4"
+flavor = "mysql"
+
+[dump]
+mysqldump_path = "mysqldump"
+
+[[source]]
+schema = "test"
+tables = ["test_table"]
