@@ -32,6 +32,8 @@ cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RX
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/BurntSushi/toml v1.2.0 h1:Rt8g24XnyGTyglgET/PRUNlrUeu9F5L+7FilkXfZgs0=
+github.com/BurntSushi/toml v1.2.0/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -220,6 +222,10 @@ github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/twothicc/common-go/commonerror v0.0.0-20220815084053-2bc49f4b1954 h1:MGAbnNrV9S4xWxpCE2ei8BmwY7SNq6iQqqfgjsipFrs=
 github.com/twothicc/common-go/commonerror v0.0.0-20220815084053-2bc49f4b1954/go.mod h1:nh3TjRzChj9k1VNWLWmbczMYpK9Dtt5Av6ttT7H2rXk=
+github.com/twothicc/common-go/errortype v0.0.0-20220815101255-e77050aa7780 h1:a2u8Ul4rNWdJQqRFsd5P2o2xh8SsntnEQf+5u9BLC9Y=
+github.com/twothicc/common-go/errortype v0.0.0-20220815101255-e77050aa7780/go.mod h1:WrwY0EpaaHKAi6aFA04gFHfNUEpGW+0DE3CVce9CAqs=
+github.com/twothicc/common-go/errortype v0.0.0-20220819023926-2c223d249805 h1:GcP5C1PcI8IPe9fUp8sgkshfCjJOXO1szwX8SV9REkE=
+github.com/twothicc/common-go/errortype v0.0.0-20220819023926-2c223d249805/go.mod h1:WrwY0EpaaHKAi6aFA04gFHfNUEpGW+0DE3CVce9CAqs=
 github.com/twothicc/common-go/grpcclient v0.0.0-20220815084400-119cb62dee6d h1:cbo3NKqsQXyuDktdgGLcmq9pMXPv83vg+OzwnhpnpDw=
 github.com/twothicc/common-go/grpcclient v0.0.0-20220815084400-119cb62dee6d/go.mod h1:Ha1LavCPgVIsuIbrLWnGuDXft+lfIpxVwCclG7KygrQ=
 github.com/twothicc/common-go/grpcclient v0.0.0-20220815092753-befdcf2093a4 h1:/6n3mp90F4278x8exVpFmAue+abppViCJHVUvCuCsnc=
