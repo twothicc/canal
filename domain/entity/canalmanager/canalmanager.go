@@ -3,6 +3,7 @@ package canalmanager
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/twothicc/canal/config"
@@ -54,12 +55,22 @@ func (cm *canalManager) PrepareAndRun(ctx context.Context) {
 }
 
 func (cm *canalManager) prepare(ctx context.Context, cfg *config.Config) error {
+	wildCardTables := make(map[string][]string, len(cfg.Sources))
 
 	for _, source := range cfg.Sources {
 		if !isValidTable(source.Tables) {
 			return ErrConfig.New("[CanalManager.prepare]invalid tables")
 		}
 
+		for _, table := range source.Tables {
+			if regexp.QuoteMeta(table) != table {
+				key := sourceKey(source.Schema, table)
+
+				if _, ok := wildCardTables[key]; ok {
+					return ErrConfig.New(fmt.Sprintf("[CanalManager.prepare]duplicate wildcard table %s", key))
+				}
+			}
+		}
 	}
 
 	return nil
@@ -75,4 +86,8 @@ func isValidTable(tables []string) bool {
 	}
 
 	return true
+}
+
+func sourceKey(schema string, table string) string {
+	return strings.to
 }
