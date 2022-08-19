@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/twothicc/canal/config"
+	"github.com/twothicc/common-go/logger"
+	"go.uber.org/zap"
 )
 
 type CanalManager interface {
@@ -18,7 +20,7 @@ type canalManager struct {
 	canal *canal.Canal
 }
 
-func NewCanalManager(ctx context.Context, cfg *config.Config) CanalManager {
+func NewCanalManager(_ context.Context, cfg *config.Config) CanalManager {
 	return &canalManager{
 		cfg: cfg,
 	}
@@ -29,12 +31,19 @@ func (cm *canalManager) Run(ctx context.Context, isLegacySync bool) error {
 
 	newCanal, err := canal.NewCanal(canalCfg)
 	if err != nil {
+		logger.WithContext(ctx).Error("[CanalManager.Run]fail to initialize canal", zap.Error(err))
+
 		return ErrConfig.New(fmt.Sprintf("[CanalManager.Run]%s", err.Error()))
 	}
 
 	cm.canal = newCanal
 
 	if err = cm.parseSource(ctx, cm.cfg); err != nil {
+		logger.WithContext(ctx).Error(
+			"[CanalManager.Run]fail to parse source",
+			zap.Error(err),
+		)
+
 		return err
 	}
 
@@ -43,6 +52,8 @@ func (cm *canalManager) Run(ctx context.Context, isLegacySync bool) error {
 
 func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) error {
 	if cm.canal == nil {
+		logger.WithContext(ctx).Error("[CanalManager.parseSource]canal not initialized")
+
 		return ErrNoCanal.New("[CanalManager.parseSource]canal not initialized")
 	}
 
@@ -50,6 +61,11 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 
 	for _, source := range cfg.Sources {
 		if !isValidTable(source.Tables) {
+			logger.WithContext(ctx).Error(
+				"[CanalManager.parseSource]invalid tables",
+				zap.Strings("tables", source.Tables),
+			)
+
 			return ErrConfig.New("[CanalManager.parseSource]invalid tables")
 		}
 
@@ -58,6 +74,11 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 				key := sourceKey(source.Schema, table)
 
 				if _, ok := wildCardTables[key]; ok {
+					logger.WithContext(ctx).Error(
+						"[CanalManager.parseSource]duplicate wildcard table",
+						zap.String("source key", key),
+					)
+
 					return ErrConfig.New(fmt.Sprintf("[CanalManager.parseSource]duplicate wildcard table %s", key))
 				}
 
@@ -68,6 +89,12 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 
 				res, err := cm.canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
 				if err != nil {
+					logger.WithContext(ctx).Error(
+						"[CanalManager.parseSource]fail to query table info", 
+						zap.String("raw sql", fmt.Sprintf(WILDCARD_TABLE_SQL, tableParam, source.Schema)),
+						zap.Error(err),
+					)
+
 					return ErrQuery.New(fmt.Sprintf("[CanalManager.parseSource]%s", err.Error()))
 				}
 
