@@ -10,62 +10,47 @@ import (
 )
 
 type CanalManager interface {
-	Run(ctx context.Context) error
+	Run(ctx context.Context, isLegacySync bool) error
 }
 
 type canalManager struct {
+	cfg   *config.Config
 	canal *canal.Canal
 }
 
-func NewCanalManager(ctx context.Context, cfg *config.Config) (CanalManager, error) {
-	canalCfg := canal.NewDefaultConfig()
-
-	dbCfg := cfg.DbConfig
-	canalCfg.Addr = dbCfg.Addr
-	canalCfg.User = dbCfg.User
-	canalCfg.Password = dbCfg.Pass
-	canalCfg.Charset = dbCfg.Charset
-
-	canalCfg.ServerID = cfg.ServerId
-
-	dumpCfg := cfg.DumpConfig
-	canalCfg.Dump.ExecutionPath = dumpCfg.DumpExecPath
-
-	for _, source := range cfg.Sources {
-		for _, table := range source.Tables {
-			canalCfg.IncludeTableRegex = append(
-				canalCfg.IncludeTableRegex,
-				fmt.Sprintf("%s\\.%s", source.Schema, table),
-			)
-		}
+func NewCanalManager(ctx context.Context, cfg *config.Config) CanalManager {
+	return &canalManager{
+		cfg: cfg,
 	}
+}
+
+func (cm *canalManager) Run(ctx context.Context, isLegacySync bool) error {
+	canalCfg := parseCanalCfg(cm.cfg, isLegacySync)
 
 	newCanal, err := canal.NewCanal(canalCfg)
 	if err != nil {
-		return nil, ErrConfig.New(fmt.Sprintf("[CanalManager.InitCanal]%s", err.Error()))
+		return ErrConfig.New(fmt.Sprintf("[CanalManager.Run]%s", err.Error()))
 	}
 
-	manager := &canalManager{
-		canal: newCanal,
+	cm.canal = newCanal
+
+	if err = cm.parseSource(ctx, cm.cfg); err != nil {
+		return err
 	}
 
-	if err = manager.parseSource(ctx, cfg); err != nil {
-		return nil, err
-	}
-
-	return manager, nil
-}
-
-func (cm *canalManager) Run(ctx context.Context) error {
 	return cm.canal.Run()
 }
 
 func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) error {
+	if cm.canal == nil {
+		return ErrNoCanal.New("[CanalManager.parseSource]canal not initialized")
+	}
+
 	wildCardTables := make(map[string][]string, len(cfg.Sources))
 
 	for _, source := range cfg.Sources {
 		if !isValidTable(source.Tables) {
-			return ErrConfig.New("[CanalManager.prepare]invalid tables")
+			return ErrConfig.New("[CanalManager.parseSource]invalid tables")
 		}
 
 		for _, table := range source.Tables {
@@ -73,7 +58,7 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 				key := sourceKey(source.Schema, table)
 
 				if _, ok := wildCardTables[key]; ok {
-					return ErrConfig.New(fmt.Sprintf("[CanalManager.prepare]duplicate wildcard table %s", key))
+					return ErrConfig.New(fmt.Sprintf("[CanalManager.parseSource]duplicate wildcard table %s", key))
 				}
 
 				tableParam := table
@@ -83,14 +68,13 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 
 				res, err := cm.canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
 				if err != nil {
-					return ErrQuery.New(fmt.Sprintf("[CanalManager.prepare]%s", err.Error()))
+					return ErrQuery.New(fmt.Sprintf("[CanalManager.parseSource]%s", err.Error()))
 				}
 
 				tables := []string{}
 
 				for rowNum := 0; rowNum < res.Resultset.RowNumber(); rowNum++ {
 					tableName, _ := res.GetString(rowNum, 0)
-
 					tables = append(tables, tableName)
 				}
 
@@ -104,6 +88,34 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 	}
 
 	return nil
+}
+
+func parseCanalCfg(cfg *config.Config, isLegacySync bool) *canal.Config {
+	canalCfg := canal.NewDefaultConfig()
+
+	dbCfg := cfg.DbConfig
+	canalCfg.Addr = dbCfg.Addr
+	canalCfg.User = dbCfg.User
+	canalCfg.Password = dbCfg.Pass
+	canalCfg.Charset = dbCfg.Charset
+
+	canalCfg.ServerID = cfg.ServerId
+
+	if isLegacySync {
+		dumpCfg := cfg.DumpConfig
+		canalCfg.Dump.ExecutionPath = dumpCfg.DumpExecPath
+	}
+
+	for _, source := range cfg.Sources {
+		for _, table := range source.Tables {
+			canalCfg.IncludeTableRegex = append(
+				canalCfg.IncludeTableRegex,
+				fmt.Sprintf("%s\\.%s", source.Schema, table),
+			)
+		}
+	}
+
+	return canalCfg
 }
 
 func isValidTable(tables []string) bool {

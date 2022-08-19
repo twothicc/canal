@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/twothicc/canal/config"
+	"github.com/twothicc/canal/domain/entity/canalmanager"
 	"github.com/twothicc/canal/tools/env"
 	"github.com/twothicc/common-go/grpcclient"
 	"github.com/twothicc/common-go/grpcclient/pool"
@@ -12,14 +13,15 @@ import (
 )
 
 type dependencies struct {
-	grpcClient *grpcclient.Client
-	appConfig  *config.Config
+	grpcClient   *grpcclient.Client
+	appConfig    *config.Config
+	canalManager canalmanager.CanalManager
 }
 
 func initDependencies(ctx context.Context) *dependencies {
 	appConfig, err := config.NewConfig("./conf/app.toml")
 	if err != nil {
-		logger.WithContext(ctx).Error("fail to load config", zap.Error(err))
+		logger.WithContext(ctx).Error("[initDependencies]fail to load config", zap.Error(err))
 	}
 
 	clientConfigs := grpcclient.GetDefaultClientConfigs(
@@ -30,8 +32,11 @@ func initDependencies(ctx context.Context) *dependencies {
 
 	client := grpcclient.NewClient(ctx, clientConfigs)
 
+	canalManager := canalmanager.NewCanalManager(ctx, appConfig)
+
 	return &dependencies{
-		grpcClient: client,
-		appConfig:  appConfig,
+		grpcClient:   client,
+		appConfig:    appConfig,
+		canalManager: canalManager,
 	}
 }
