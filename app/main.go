@@ -40,5 +40,9 @@ func main() {
 
 	// 	logger.WithContext(ctx).Info("test", zap.String("msg", resp.GetMsg()))
 	// }
-	logger.WithContext(ctx).Info("loaded dependencies", zap.Any("dependencies", dependencies))
+	logger.WithContext(ctx).Info("loaded dependencies")
+
+	if err := dependencies.canalManager.Run(ctx, true); err != nil {
+		logger.WithContext(ctx).Error("fail to run canal", zap.Error(err))
+	}
 }

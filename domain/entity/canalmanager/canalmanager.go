@@ -3,31 +3,39 @@ package canalmanager
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"regexp"
 
 	"github.com/go-mysql-org/go-mysql/canal"
+	"github.com/siddontang/go-log/log"
 	"github.com/twothicc/canal/config"
+	"github.com/twothicc/canal/handlers/events/sync"
+	"github.com/twothicc/canal/tools/env"
 	"github.com/twothicc/common-go/logger"
 	"go.uber.org/zap"
 )
 
 type CanalManager interface {
 	Run(ctx context.Context, isLegacySync bool) error
+	Close(ctx context.Context)
 }
 
 type canalManager struct {
-	cfg   *config.Config
-	canal *canal.Canal
+	cfg          *config.Config
+	eventHandler sync.SyncEventHandler
+	canal        *canal.Canal
 }
 
-func NewCanalManager(_ context.Context, cfg *config.Config) CanalManager {
+func NewCanalManager(ctx context.Context, cfg *config.Config, eventHandler sync.SyncEventHandler) CanalManager {
 	return &canalManager{
-		cfg: cfg,
+		cfg:          cfg,
+		eventHandler: eventHandler,
 	}
 }
 
 func (cm *canalManager) Run(ctx context.Context, isLegacySync bool) error {
-	canalCfg := parseCanalCfg(cm.cfg, isLegacySync)
+	canalCfg := parseCanalCfg(ctx, cm.cfg, isLegacySync)
 
 	newCanal, err := canal.NewCanal(canalCfg)
 	if err != nil {
@@ -37,6 +45,8 @@ func (cm *canalManager) Run(ctx context.Context, isLegacySync bool) error {
 	}
 
 	cm.canal = newCanal
+
+	cm.canal.SetEventHandler(cm.eventHandler)
 
 	if err = cm.parseSource(ctx, cm.cfg); err != nil {
 		logger.WithContext(ctx).Error(
@@ -48,6 +58,12 @@ func (cm *canalManager) Run(ctx context.Context, isLegacySync bool) error {
 	}
 
 	return cm.canal.Run()
+}
+
+func (cm *canalManager) Close(ctx context.Context) {
+	logger.WithContext(ctx).Info("[CanalManager.Close]closing")
+
+	cm.canal.Close()
 }
 
 func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) error {
@@ -90,7 +106,7 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 				res, err := cm.canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
 				if err != nil {
 					logger.WithContext(ctx).Error(
-						"[CanalManager.parseSource]fail to query table info", 
+						"[CanalManager.parseSource]fail to query table info",
 						zap.String("raw sql", fmt.Sprintf(WILDCARD_TABLE_SQL, tableParam, source.Schema)),
 						zap.Error(err),
 					)
@@ -117,16 +133,33 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 	return nil
 }
 
-func parseCanalCfg(cfg *config.Config, isLegacySync bool) *canal.Config {
+func parseCanalCfg(ctx context.Context, cfg *config.Config, isLegacySync bool) *canal.Config {
 	canalCfg := canal.NewDefaultConfig()
 
 	dbCfg := cfg.DbConfig
 	canalCfg.Addr = dbCfg.Addr
 	canalCfg.User = dbCfg.User
-	canalCfg.Password = dbCfg.Pass
+	canalCfg.Password = env.EnvConfigs.DbPass
 	canalCfg.Charset = dbCfg.Charset
 
 	canalCfg.ServerID = cfg.ServerId
+
+	// By default, don't log
+	nullHandler, _ := log.NewNullHandler()
+	canalCfg.Logger = log.NewDefault(nullHandler)
+
+	logFileName := fmt.Sprintf("synclog/canal%d.log", cfg.ServerId)
+	_, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		logger.WithContext(ctx).Error("[CanalManager.parseCanalCfg]fail to create canal logger file", zap.Error(err))
+	} else {
+		fileHandler, err := log.NewFileHandler(logFileName, 0666)
+		if err != nil {
+			logger.WithContext(ctx).Error("[CanalManager.parseCanalCfg]fail to initialize canal logger", zap.Error(err))
+		} else {
+			canalCfg.Logger = log.NewDefault(fileHandler)
+		}
+	}
 
 	if isLegacySync {
 		dumpCfg := cfg.DumpConfig
