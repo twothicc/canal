@@ -40,6 +40,8 @@ func NewSyncManager(ctx context.Context, cfg *config.Config, eventHandler sync.S
 //
 // isLegacySync indicates whether the sync will include existing records
 func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
+	logger.WithContext(ctx).Info("[SyncManager.Run]running data sync", zap.Uint32("server id", sm.cfg.ServerId))
+
 	canalCfg := parseCanalCfg(ctx, sm.cfg, isLegacySync)
 
 	newCanal, err := canal.NewCanal(canalCfg)
@@ -53,7 +55,7 @@ func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
 
 	sm.canal.SetEventHandler(sm.eventHandler)
 
-	if err = sm.parseSource(ctx, sm.cfg); err != nil {
+	if err = sm.parseSource(ctx); err != nil {
 		logger.WithContext(ctx).Error(
 			"[SyncManager.Run]fail to parse source",
 			zap.Error(err),
@@ -67,22 +69,24 @@ func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
 
 // Close - closes underlying canal, stopping data sync immediately
 func (sm *syncManager) Close(ctx context.Context) {
-	logger.WithContext(ctx).Info("[SyncManager.Close]closing")
+	logger.WithContext(ctx).Info("[SyncManager.Close]closing", zap.Uint32("server id", sm.cfg.ServerId))
 
 	sm.canal.Close()
 }
 
 // parseSource - parses special characters in tables from config source into valid tables
-func (sm *syncManager) parseSource(ctx context.Context, cfg *config.Config) error {
+func (sm *syncManager) parseSource(ctx context.Context) error {
+	logger.WithContext(ctx).Info("[SyncManager.parseSource]parsing source", zap.Uint32("server id", sm.cfg.ServerId))
+
 	if sm.canal == nil {
 		logger.WithContext(ctx).Error("[SyncManager.parseSource]canal not initialized")
 
 		return ErrNoCanal.New("[SyncManager.parseSource]canal not initialized")
 	}
 
-	wildCardTables := make(map[string][]string, len(cfg.Sources))
+	wildCardTables := make(map[string][]string, len(sm.cfg.Sources))
 
-	for _, source := range cfg.Sources {
+	for _, source := range sm.cfg.Sources {
 		if !isValidTable(source.Tables) {
 			logger.WithContext(ctx).Error(
 				"[SyncManager.parseSource]invalid tables",
@@ -142,6 +146,12 @@ func (sm *syncManager) parseSource(ctx context.Context, cfg *config.Config) erro
 }
 
 func parseCanalCfg(ctx context.Context, cfg *config.Config, isLegacySync bool) *canal.Config {
+	logger.WithContext(ctx).Info(
+		"[SyncManager.parseCanalCfg]parsing canal configs",
+		zap.Uint32("server id", cfg.ServerId),
+		zap.Bool("isLegacySync", isLegacySync),
+	)
+
 	canalCfg := canal.NewDefaultConfig()
 
 	dbCfg := cfg.DbConfig
@@ -197,6 +207,8 @@ func sourceKey(schema, table string) string {
 }
 
 func initLogger(ctx context.Context, cfg *config.Config) (*log.Logger, error) {
+	logger.WithContext(ctx).Info("[SyncManager.initLogger]initializing logger", zap.Uint32("server id", cfg.ServerId))
+
 	path := fmt.Sprintf("synclog/canal%d.log", cfg.ServerId)
 
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
