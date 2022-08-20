@@ -23,8 +23,9 @@ go.work
 # build files
 build
 
-# log file
+# log files
 server.log
+synclog/
 
 # vscode
 .vscode/
