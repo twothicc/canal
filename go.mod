@@ -28,6 +28,7 @@ require (
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24 // indirect
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726 // indirect
 	github.com/twothicc/common-go/commonerror v0.0.0-20220815084053-2bc49f4b1954 // indirect
+	github.com/twothicc/protobuf v0.0.0-20220820154307-eeaba61584fb
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect

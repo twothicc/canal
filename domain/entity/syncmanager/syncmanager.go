@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"regexp"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/twothicc/canal/config"
 	"github.com/twothicc/canal/handlers/events/sync"
 	"github.com/twothicc/canal/tools/env"
+	"github.com/twothicc/canal/tools/idgenerator"
+	"github.com/twothicc/common-go/grpcclient"
 	"github.com/twothicc/common-go/logger"
 	"go.uber.org/zap"
 )
@@ -29,10 +32,13 @@ type syncManager struct {
 }
 
 // NewSyncManager - creates a SyncManager
-func NewSyncManager(ctx context.Context, cfg *config.Config, eventHandler sync.SyncEventHandler) SyncManager {
+func NewSyncManager(ctx context.Context, cfg *config.Config, client *grpcclient.Client) SyncManager {
+	serverId := idgenerator.GetId()
+	cfg.ServerId = serverId
+
 	return &syncManager{
 		cfg:          cfg,
-		eventHandler: eventHandler,
+		eventHandler: sync.NewSyncEventHandler(ctx, client, cfg.ServerId),
 	}
 }
 
@@ -53,16 +59,27 @@ func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
 
 	sm.canal = newCanal
 
-	sm.canal.SetEventHandler(sm.eventHandler)
-
 	if err = sm.parseSource(ctx); err != nil {
 		logger.WithContext(ctx).Error(
 			"[SyncManager.Run]fail to parse source",
+			zap.Uint32("server id", sm.cfg.ServerId),
 			zap.Error(err),
 		)
 
 		return err
 	}
+
+	if err := sm.canal.CheckBinlogRowImage("FULL"); err != nil {
+		logger.WithContext(ctx).Error(
+			"[SyncManager.Run]invalid binlog row image",
+			zap.Uint32("server id", sm.cfg.ServerId),
+			zap.Error(err),
+		)
+
+		return ErrBinlog.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
+	}
+
+	sm.canal.SetEventHandler(sm.eventHandler)
 
 	return sm.canal.Run()
 }
@@ -162,6 +179,10 @@ func parseCanalCfg(ctx context.Context, cfg *config.Config, isLegacySync bool) *
 
 	canalCfg.ServerID = cfg.ServerId
 
+	// Set timestamp location to UTC instead of local time
+	canalCfg.ParseTime = false
+	canalCfg.TimestampStringLocation = time.UTC
+
 	canalLogger, err := initLogger(ctx, cfg)
 	if err != nil {
 		nullHandler, _ := log.NewNullHandler()
@@ -209,13 +230,11 @@ func sourceKey(schema, table string) string {
 func initLogger(ctx context.Context, cfg *config.Config) (*log.Logger, error) {
 	logger.WithContext(ctx).Info("[SyncManager.initLogger]initializing logger", zap.Uint32("server id", cfg.ServerId))
 
-	path := fmt.Sprintf("synclog/canal%d.log", cfg.ServerId)
-
-	if err := os.MkdirAll(path, os.ModePerm); err != nil {
+	if err := os.MkdirAll("synclog", os.ModePerm); err != nil {
 		return nil, ErrLogger.New(fmt.Sprintf("[SyncManager.initLogger]%s", err.Error()))
 	}
 
-	logFileName := fmt.Sprintf("canal%d.log", cfg.ServerId)
+	logFileName := fmt.Sprintf("synclog/canal%d.log", cfg.ServerId)
 
 	_, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, LOG_PERMISSION)
 	if err == nil {

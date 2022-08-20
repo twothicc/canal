@@ -25,9 +25,9 @@ type DumpConfig struct {
 
 type Config struct {
 	DbConfig   DbConfig       `toml:"database"`
-	ServerId   uint32         `toml:"server_id"`
 	DumpConfig DumpConfig     `toml:"dump"`
 	Sources    []SourceConfig `toml:"source"`
+	ServerId   uint32
 }
 
 func NewConfig(path string) (*Config, error) {

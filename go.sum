@@ -150,6 +150,10 @@ github.com/twothicc/common-go/grpcclient v0.0.0-20220815101255-e77050aa7780 h1:H
 github.com/twothicc/common-go/grpcclient v0.0.0-20220815101255-e77050aa7780/go.mod h1:Ha1LavCPgVIsuIbrLWnGuDXft+lfIpxVwCclG7KygrQ=
 github.com/twothicc/common-go/logger v0.0.0-20220815095443-75a5d558c1d5 h1:kh44RcJ0BiX/g7+BJIFLY1Ini3+hDcauONBV+EsLAog=
 github.com/twothicc/common-go/logger v0.0.0-20220815095443-75a5d558c1d5/go.mod h1:jYgkm5U/pQuALJ/EpEQk9O8TDUun9gRuHOQnrNRmccw=
+github.com/twothicc/protobuf v0.0.0-20220820151841-42f7763da314 h1:lCIEARIr07CrmtNr6/5BH18BeObnfQP5nVUIVmsbDcw=
+github.com/twothicc/protobuf v0.0.0-20220820151841-42f7763da314/go.mod h1:7DH3YtMcKlTASEUi6vEJ/jzOYeAHaBLMdqNDSqiBouM=
+github.com/twothicc/protobuf v0.0.0-20220820154307-eeaba61584fb h1:Cs0vu5ph5KAsBigbhzW+ZAn9iEAFDwCeqbK6vXJXYf0=
+github.com/twothicc/protobuf v0.0.0-20220820154307-eeaba61584fb/go.mod h1:7DH3YtMcKlTASEUi6vEJ/jzOYeAHaBLMdqNDSqiBouM=
 github.com/uber/jaeger-client-go v2.30.0+incompatible h1:D6wyKGCecFaSRUpo8lCVbaOOb6ThwMmTEbhRwtKR97o=
 github.com/uber/jaeger-client-go v2.30.0+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
 github.com/uber/jaeger-lib v2.4.1+incompatible h1:td4jdvLcExb4cBISKIpHuGoVXh+dVKhn2Um6rjCsSsg=
