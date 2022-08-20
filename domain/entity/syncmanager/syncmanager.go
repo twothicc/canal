@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// SyncManager - manages data sync
 type SyncManager interface {
 	Run(ctx context.Context, isLegacySync bool) error
 	Close(ctx context.Context)
@@ -27,6 +28,7 @@ type syncManager struct {
 	canal        *canal.Canal
 }
 
+// NewSyncManager - creates a SyncManager
 func NewSyncManager(ctx context.Context, cfg *config.Config, eventHandler sync.SyncEventHandler) SyncManager {
 	return &syncManager{
 		cfg:          cfg,
@@ -34,6 +36,9 @@ func NewSyncManager(ctx context.Context, cfg *config.Config, eventHandler sync.S
 	}
 }
 
+// Run - starts data sync
+//
+// isLegacySync indicates whether the sync will include existing records
 func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
 	canalCfg := parseCanalCfg(ctx, sm.cfg, isLegacySync)
 
@@ -60,12 +65,14 @@ func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
 	return sm.canal.Run()
 }
 
+// Close - closes underlying canal, stopping data sync immediately
 func (sm *syncManager) Close(ctx context.Context) {
 	logger.WithContext(ctx).Info("[SyncManager.Close]closing")
 
 	sm.canal.Close()
 }
 
+// parseSource - parses special characters in tables from config source into valid tables
 func (sm *syncManager) parseSource(ctx context.Context, cfg *config.Config) error {
 	if sm.canal == nil {
 		logger.WithContext(ctx).Error("[SyncManager.parseSource]canal not initialized")
@@ -86,6 +93,7 @@ func (sm *syncManager) parseSource(ctx context.Context, cfg *config.Config) erro
 		}
 
 		for _, table := range source.Tables {
+			// QuoteMeta escapes regex metacharacters
 			if regexp.QuoteMeta(table) != table {
 				key := sourceKey(source.Schema, table)
 
@@ -169,6 +177,9 @@ func parseCanalCfg(ctx context.Context, cfg *config.Config, isLegacySync bool) *
 	return canalCfg
 }
 
+// isValidTable - checks if tables provided in config are valid
+//
+// If a wildcard table is given, then no other tables can be provided
 func isValidTable(tables []string) bool {
 	if len(tables) > 1 {
 		for _, item := range tables {
@@ -181,7 +192,7 @@ func isValidTable(tables []string) bool {
 	return true
 }
 
-func sourceKey(schema string, table string) string {
+func sourceKey(schema, table string) string {
 	return fmt.Sprintf(SOURCE_KEY_FORMAT, schema, table)
 }
 
@@ -203,5 +214,6 @@ func initLogger(ctx context.Context, cfg *config.Config) (*log.Logger, error) {
 	}
 
 	logger.WithContext(ctx).Error("[SyncManager.initLogger]fail to initialize canal logger", zap.Error(err))
+
 	return nil, ErrLogger.New(fmt.Sprintf("[SyncManager.initLogger]%s", err.Error()))
 }
