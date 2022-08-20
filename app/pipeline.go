@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/twothicc/canal/config"
-	"github.com/twothicc/canal/domain/entity/canalmanager"
+	"github.com/twothicc/canal/domain/entity/syncmanager"
 	"github.com/twothicc/canal/handlers/events/sync"
 	"github.com/twothicc/canal/tools/env"
 	"github.com/twothicc/common-go/grpcclient"
@@ -16,7 +16,7 @@ import (
 type dependencies struct {
 	grpcClient   *grpcclient.Client
 	appConfig    *config.Config
-	canalManager canalmanager.CanalManager
+	canalManager syncmanager.SyncManager
 }
 
 func initDependencies(ctx context.Context) *dependencies {
@@ -33,7 +33,7 @@ func initDependencies(ctx context.Context) *dependencies {
 
 	client := grpcclient.NewClient(ctx, clientConfigs)
 
-	canalManager := canalmanager.NewCanalManager(
+	canalManager := syncmanager.NewSyncManager(
 		ctx,
 		appConfig,
 		sync.NewSyncEventHandler(ctx, client),

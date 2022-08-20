@@ -1,4 +1,4 @@
-package canalmanager
+package syncmanager
 
 import (
 	"context"
@@ -16,61 +16,61 @@ import (
 	"go.uber.org/zap"
 )
 
-type CanalManager interface {
+type SyncManager interface {
 	Run(ctx context.Context, isLegacySync bool) error
 	Close(ctx context.Context)
 }
 
-type canalManager struct {
+type syncManager struct {
 	cfg          *config.Config
 	eventHandler sync.SyncEventHandler
 	canal        *canal.Canal
 }
 
-func NewCanalManager(ctx context.Context, cfg *config.Config, eventHandler sync.SyncEventHandler) CanalManager {
-	return &canalManager{
+func NewSyncManager(ctx context.Context, cfg *config.Config, eventHandler sync.SyncEventHandler) SyncManager {
+	return &syncManager{
 		cfg:          cfg,
 		eventHandler: eventHandler,
 	}
 }
 
-func (cm *canalManager) Run(ctx context.Context, isLegacySync bool) error {
-	canalCfg := parseCanalCfg(ctx, cm.cfg, isLegacySync)
+func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
+	canalCfg := parseCanalCfg(ctx, sm.cfg, isLegacySync)
 
 	newCanal, err := canal.NewCanal(canalCfg)
 	if err != nil {
-		logger.WithContext(ctx).Error("[CanalManager.Run]fail to initialize canal", zap.Error(err))
+		logger.WithContext(ctx).Error("[SyncManager.Run]fail to initialize canal", zap.Error(err))
 
-		return ErrConfig.New(fmt.Sprintf("[CanalManager.Run]%s", err.Error()))
+		return ErrConfig.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
 	}
 
-	cm.canal = newCanal
+	sm.canal = newCanal
 
-	cm.canal.SetEventHandler(cm.eventHandler)
+	sm.canal.SetEventHandler(sm.eventHandler)
 
-	if err = cm.parseSource(ctx, cm.cfg); err != nil {
+	if err = sm.parseSource(ctx, sm.cfg); err != nil {
 		logger.WithContext(ctx).Error(
-			"[CanalManager.Run]fail to parse source",
+			"[SyncManager.Run]fail to parse source",
 			zap.Error(err),
 		)
 
 		return err
 	}
 
-	return cm.canal.Run()
+	return sm.canal.Run()
 }
 
-func (cm *canalManager) Close(ctx context.Context) {
-	logger.WithContext(ctx).Info("[CanalManager.Close]closing")
+func (sm *syncManager) Close(ctx context.Context) {
+	logger.WithContext(ctx).Info("[SyncManager.Close]closing")
 
-	cm.canal.Close()
+	sm.canal.Close()
 }
 
-func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) error {
-	if cm.canal == nil {
-		logger.WithContext(ctx).Error("[CanalManager.parseSource]canal not initialized")
+func (sm *syncManager) parseSource(ctx context.Context, cfg *config.Config) error {
+	if sm.canal == nil {
+		logger.WithContext(ctx).Error("[SyncManager.parseSource]canal not initialized")
 
-		return ErrNoCanal.New("[CanalManager.parseSource]canal not initialized")
+		return ErrNoCanal.New("[SyncManager.parseSource]canal not initialized")
 	}
 
 	wildCardTables := make(map[string][]string, len(cfg.Sources))
@@ -78,11 +78,11 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 	for _, source := range cfg.Sources {
 		if !isValidTable(source.Tables) {
 			logger.WithContext(ctx).Error(
-				"[CanalManager.parseSource]invalid tables",
+				"[SyncManager.parseSource]invalid tables",
 				zap.Strings("tables", source.Tables),
 			)
 
-			return ErrConfig.New("[CanalManager.parseSource]invalid tables")
+			return ErrConfig.New("[SyncManager.parseSource]invalid tables")
 		}
 
 		for _, table := range source.Tables {
@@ -91,11 +91,11 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 
 				if _, ok := wildCardTables[key]; ok {
 					logger.WithContext(ctx).Error(
-						"[CanalManager.parseSource]duplicate wildcard table",
+						"[SyncManager.parseSource]duplicate wildcard table",
 						zap.String("source key", key),
 					)
 
-					return ErrConfig.New(fmt.Sprintf("[CanalManager.parseSource]duplicate wildcard table %s", key))
+					return ErrConfig.New(fmt.Sprintf("[SyncManager.parseSource]duplicate wildcard table %s", key))
 				}
 
 				tableParam := table
@@ -103,15 +103,15 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 					tableParam = ANY_TABLE
 				}
 
-				res, err := cm.canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
+				res, err := sm.canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
 				if err != nil {
 					logger.WithContext(ctx).Error(
-						"[CanalManager.parseSource]fail to query table info",
+						"[SyncManager.parseSource]fail to query table info",
 						zap.String("raw sql", fmt.Sprintf(WILDCARD_TABLE_SQL, tableParam, source.Schema)),
 						zap.Error(err),
 					)
 
-					return ErrQuery.New(fmt.Sprintf("[CanalManager.parseSource]%s", err.Error()))
+					return ErrQuery.New(fmt.Sprintf("[SyncManager.parseSource]%s", err.Error()))
 				}
 
 				tables := []string{}
@@ -121,11 +121,11 @@ func (cm *canalManager) parseSource(ctx context.Context, cfg *config.Config) err
 					tables = append(tables, tableName)
 				}
 
-				cm.canal.AddDumpTables(source.Schema, tables...)
+				sm.canal.AddDumpTables(source.Schema, tables...)
 
 				wildCardTables[key] = tables
 			} else {
-				cm.canal.AddDumpTables(source.Schema, table)
+				sm.canal.AddDumpTables(source.Schema, table)
 			}
 		}
 	}
@@ -144,22 +144,13 @@ func parseCanalCfg(ctx context.Context, cfg *config.Config, isLegacySync bool) *
 
 	canalCfg.ServerID = cfg.ServerId
 
-	// By default, don't log
-	nullHandler, _ := log.NewNullHandler()
-	canalCfg.Logger = log.NewDefault(nullHandler)
-
-	logFileName := fmt.Sprintf("synclog/canal%d.log", cfg.ServerId)
-	_, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	canalLogger, err := initLogger(ctx, cfg)
 	if err != nil {
-		logger.WithContext(ctx).Error("[CanalManager.parseCanalCfg]fail to create canal logger file", zap.Error(err))
-	} else {
-		fileHandler, err := log.NewFileHandler(logFileName, 0666)
-		if err != nil {
-			logger.WithContext(ctx).Error("[CanalManager.parseCanalCfg]fail to initialize canal logger", zap.Error(err))
-		} else {
-			canalCfg.Logger = log.NewDefault(fileHandler)
-		}
+		nullHandler, _ := log.NewNullHandler()
+		canalLogger = log.NewDefault(nullHandler)
 	}
+
+	canalCfg.Logger = canalLogger
 
 	if isLegacySync {
 		dumpCfg := cfg.DumpConfig
@@ -192,4 +183,25 @@ func isValidTable(tables []string) bool {
 
 func sourceKey(schema string, table string) string {
 	return fmt.Sprintf(SOURCE_KEY_FORMAT, schema, table)
+}
+
+func initLogger(ctx context.Context, cfg *config.Config) (*log.Logger, error) {
+	path := fmt.Sprintf("synclog/canal%d.log", cfg.ServerId)
+
+	if err := os.MkdirAll(path, os.ModePerm); err != nil {
+		return nil, ErrLogger.New(fmt.Sprintf("[SyncManager.initLogger]%s", err.Error()))
+	}
+
+	logFileName := fmt.Sprintf("canal%d.log", cfg.ServerId)
+
+	_, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, LOG_PERMISSION)
+	if err == nil {
+		fileHandler, handlerErr := log.NewFileHandler(logFileName, LOG_PERMISSION)
+		if handlerErr == nil {
+			return log.NewDefault(fileHandler), nil
+		}
+	}
+
+	logger.WithContext(ctx).Error("[SyncManager.initLogger]fail to initialize canal logger", zap.Error(err))
+	return nil, ErrLogger.New(fmt.Sprintf("[SyncManager.initLogger]%s", err.Error()))
 }
