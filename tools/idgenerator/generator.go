@@ -15,5 +15,6 @@ func GetId() uint32 {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	gen.id++
+
 	return gen.id
 }

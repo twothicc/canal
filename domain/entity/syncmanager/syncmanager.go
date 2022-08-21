@@ -22,9 +22,9 @@ import (
 )
 
 type Status struct {
+	Sources   []config.SourceConfig
 	ServerId  uint32
 	IsRunning bool
-	Sources   []config.SourceConfig
 }
 
 // SyncManager - manages data sync
@@ -36,14 +36,14 @@ type SyncManager interface {
 }
 
 type syncManager struct {
-	isRunning    bool
 	ctx          context.Context
+	eventHandler sync.SyncEventHandler
+	saveInfo     *savemanager.SaveInfo
 	cancel       context.CancelFunc
 	cfg          *config.Config
-	eventHandler sync.SyncEventHandler
 	canal        *canal.Canal
-	saveInfo     *savemanager.SaveInfo
 	syncCh       chan mysql.Position
+	isRunning    bool
 }
 
 // NewSyncManager - creates a SyncManager
@@ -83,7 +83,7 @@ func NewSyncManager(
 		return nil, ErrBinlog.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
 	}
 
-	syncCh := make(chan mysql.Position, 4096)
+	syncCh := make(chan mysql.Position, SYNC_CHANNEL_SIZE)
 
 	saveInfo, saveErr := savemanager.LoadSaveInfo(ctx, cfg.ServerId)
 	if saveErr != nil {
@@ -140,6 +140,7 @@ func (sm *syncManager) Run(isLegacySync bool) error {
 
 	return func() error {
 		var err error
+
 		if isLegacySync {
 			if runErr := sm.canal.Run(); runErr != nil {
 				err = runErr
@@ -157,6 +158,7 @@ func (sm *syncManager) Run(isLegacySync bool) error {
 		}
 
 		sm.isRunning = false
+
 		return err
 	}()
 }
@@ -205,10 +207,10 @@ func (sm *syncManager) syncLoop(initPos mysql.Position) {
 }
 
 // parseSource - parses special characters in tables from config source into valid tables
-func parseSource(ctx context.Context, cfg *config.Config, canal *canal.Canal) error {
+func parseSource(ctx context.Context, cfg *config.Config, c *canal.Canal) error {
 	logger.WithContext(ctx).Info("[SyncManager.parseSource]parsing source", zap.Uint32("server id", cfg.ServerId))
 
-	if canal == nil {
+	if c == nil {
 		logger.WithContext(ctx).Error("[SyncManager.parseSource]canal not initialized")
 
 		return ErrNoCanal.New("[SyncManager.parseSource]canal not initialized")
@@ -245,7 +247,7 @@ func parseSource(ctx context.Context, cfg *config.Config, canal *canal.Canal) er
 					tableParam = ANY_TABLE
 				}
 
-				res, err := canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
+				res, err := c.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
 				if err != nil {
 					logger.WithContext(ctx).Error(
 						"[SyncManager.parseSource]fail to query table info",
@@ -263,11 +265,11 @@ func parseSource(ctx context.Context, cfg *config.Config, canal *canal.Canal) er
 					tables = append(tables, tableName)
 				}
 
-				canal.AddDumpTables(source.Schema, tables...)
+				c.AddDumpTables(source.Schema, tables...)
 
 				wildCardTables[key] = tables
 			} else {
-				canal.AddDumpTables(source.Schema, table)
+				c.AddDumpTables(source.Schema, table)
 			}
 		}
 	}

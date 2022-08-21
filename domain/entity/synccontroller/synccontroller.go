@@ -51,7 +51,8 @@ func (s *syncController) Add(ctx context.Context, id uint32, manager syncmanager
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	logger.WithContext(ctx).Info("[SyncManager.Add]adding syncmanager", zap.Uint32("id", id))
+	logger.WithContext(ctx).Info("[SyncController.Add]adding syncmanager", zap.Uint32("id", id))
+
 	s.syncmanagers[id] = manager
 }
 
@@ -59,10 +60,10 @@ func (s *syncController) Remove(ctx context.Context, id uint32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	logger.WithContext(ctx).Info("[SyncManager.Remove]removing syncmanager", zap.Uint32("id", id))
+	logger.WithContext(ctx).Info("[SyncController.Remove]removing syncmanager", zap.Uint32("id", id))
 
 	if manager, ok := s.syncmanagers[id]; !ok {
-		return ErrParam.New(fmt.Sprintf("[SyncManager.Remove]id %d does not exist", id))
+		return ErrParam.New(fmt.Sprintf("[SyncController.Remove]id %d does not exist", id))
 	} else {
 		if manager.Status().IsRunning {
 			manager.Close()
@@ -72,7 +73,7 @@ func (s *syncController) Remove(ctx context.Context, id uint32) error {
 
 		if err := os.Remove(fmt.Sprintf("canal%d.log", manager.GetId())); err != nil {
 			logger.WithContext(ctx).Error(
-				"[SyncManager.Remove]fail to delete log file",
+				"[SyncController.Remove]fail to delete log file",
 				zap.Uint32("server id", manager.GetId()),
 			)
 		}
@@ -86,10 +87,14 @@ func (s *syncController) Start(ctx context.Context, id uint32, isLegacySync bool
 	defer s.mu.Unlock()
 
 	if manager, ok := s.syncmanagers[id]; !ok {
-		return ErrParam.New(fmt.Sprintf("[SyncManager.Start]id %d does not exist", id))
-	} else {
+		return ErrParam.New(fmt.Sprintf("[SyncController.Start]id %d does not exist", id))
+	} else if ok {
 		if !manager.Status().IsRunning {
-			go manager.Run(isLegacySync)
+			go func() {
+				if err := manager.Run(isLegacySync); err != nil {
+					logger.WithContext(ctx).Error("[SyncController.Start]fail to run syncmanager", zap.Error(err))
+				}
+			}()
 		}
 	}
 
@@ -101,8 +106,8 @@ func (s *syncController) Stop(ctx context.Context, id uint32) error {
 	defer s.mu.Unlock()
 
 	if manager, ok := s.syncmanagers[id]; !ok {
-		return ErrParam.New(fmt.Sprintf("[SyncManager.Stop]id %d does not exist", id))
-	} else {
+		return ErrParam.New(fmt.Sprintf("[SyncController.Stop]id %d does not exist", id))
+	} else if ok {
 		if manager.Status().IsRunning {
 			manager.Close()
 		}
@@ -112,11 +117,11 @@ func (s *syncController) Stop(ctx context.Context, id uint32) error {
 }
 
 func (s *syncController) Close(ctx context.Context) error {
-	logger.WithContext(ctx).Info("[SyncManager.Close]closing all syncmanagers")
+	logger.WithContext(ctx).Info("[SyncController.Close]closing all syncmanagers")
 
-	for key, _ := range s.syncmanagers {
+	for key := range s.syncmanagers {
 		if err := s.Remove(ctx, key); err != nil {
-			logger.WithContext(ctx).Error("[SyncManager.Close]fail to close syncmanagers", zap.Error(err))
+			logger.WithContext(ctx).Error("[SyncController.Close]fail to close syncmanagers", zap.Error(err))
 
 			return err
 		}

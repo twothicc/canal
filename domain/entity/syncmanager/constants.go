@@ -21,5 +21,6 @@ const (
 
 // sync constants
 const (
-	SAVE_INTERVAL = 3 * time.Second
+	SAVE_INTERVAL     = 3 * time.Second
+	SYNC_CHANNEL_SIZE = 4096
 )

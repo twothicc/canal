@@ -20,19 +20,17 @@ import (
 )
 
 type SaveInfo struct {
-	sync.RWMutex
-
-	Name string `toml:"bin_name"`
-	Pos  uint32 `toml:"bin_pos"`
-
-	filePath     string
 	lastSaveTime time.Time
+	Name         string `toml:"bin_name"`
+	filePath     string
+	mu           sync.RWMutex
+	Pos          uint32 `toml:"bin_pos"`
 }
 
 func LoadSaveInfo(ctx context.Context, serverId uint32) (*SaveInfo, error) {
 	var s SaveInfo
 
-	dir := path.Join(SAVE_DIR, strconv.FormatUint(uint64(serverId), 10))
+	dir := path.Join(SAVE_DIR, strconv.FormatUint(uint64(serverId), BASE10))
 	filePath := path.Join(dir, "save.info")
 
 	s.filePath = filePath
@@ -61,13 +59,13 @@ func LoadSaveInfo(ctx context.Context, serverId uint32) (*SaveInfo, error) {
 func (s *SaveInfo) Save(ctx context.Context, pos mysql.Position) error {
 	logger.WithContext(ctx).Info(fmt.Sprintf("[SaveManager.Save]%s", pos))
 
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	s.Name = pos.Name
 	s.Pos = pos.Pos
 
-	if len(s.filePath) == 0 {
+	if s.filePath == "" {
 		return nil
 	}
 
@@ -77,12 +75,14 @@ func (s *SaveInfo) Save(ctx context.Context, pos mysql.Position) error {
 	}
 
 	s.lastSaveTime = n
+
 	var buf bytes.Buffer
+
 	e := toml.NewEncoder(&buf)
 
-	e.Encode(s)
+	_ = e.Encode(s)
 
-	if err := ioutil2.WriteFileAtomic(s.filePath, buf.Bytes(), 0644); err != nil {
+	if err := ioutil2.WriteFileAtomic(s.filePath, buf.Bytes(), SAVE_FILE_PERMISSION); err != nil {
 		logger.WithContext(ctx).Error("[SaveManager.Save]fail to write save info", zap.Error(err))
 
 		return ErrFile.New(fmt.Sprintf("[SaveManager.Save]%s", err.Error()))
@@ -92,8 +92,8 @@ func (s *SaveInfo) Save(ctx context.Context, pos mysql.Position) error {
 }
 
 func (s *SaveInfo) Position() mysql.Position {
-	s.RLock()
-	defer s.RUnlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	return mysql.Position{
 		Name: s.Name,

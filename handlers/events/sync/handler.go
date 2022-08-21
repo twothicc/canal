@@ -23,8 +23,8 @@ type syncEventHandler struct {
 	canal.DummyEventHandler
 	ctx      context.Context
 	client   *grpcclient.Client
-	serverId uint32
 	syncCh   chan mysql.Position
+	serverId uint32
 }
 
 func NewSyncEventHandler(
@@ -195,7 +195,8 @@ func (se *syncEventHandler) parseRowsEvent(e *canal.RowsEvent) (*pb.SyncRequest,
 
 func (se *syncEventHandler) parseTimestamp(rawTimestamp interface{}) (uint32, error) {
 	timestampString := fmt.Sprint(rawTimestamp)
-	timestamp, err := strconv.ParseUint(timestampString, 10, 32)
+
+	timestamp, err := strconv.ParseUint(timestampString, BASE10, BIT32)
 	if err != nil {
 		logger.WithContext(se.ctx).Error(
 			"[SyncEventHandler.parseTimestamp]fail to parse ctime",

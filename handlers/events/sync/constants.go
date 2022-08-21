@@ -11,3 +11,8 @@ const (
 	DELETE = "delete"
 	UPDATE = "update"
 )
+
+const (
+	BASE10 = 10
+	BIT32  = 32
+)
