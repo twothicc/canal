@@ -69,13 +69,13 @@ func (se *syncEventHandler) OnRow(e *canal.RowsEvent) error {
 				zap.String("msg", resp.GetMsg()),
 			)
 		}
+	} else {
+		logger.WithContext(se.ctx).Warn(
+			"[SyncEventHandler.OnRow]fail to handle rows event",
+			zap.Uint32("server id", se.serverId),
+			zap.Error(err),
+		)
 	}
-
-	logger.WithContext(se.ctx).Warn(
-		"[SyncEventHandler.OnRow]fail to handle rows event",
-		zap.Uint32("server id", se.serverId),
-		zap.Error(err),
-	)
 
 	return nil
 }

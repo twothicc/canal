@@ -13,4 +13,5 @@ var (
 	ErrNoCanal = errortype.ErrorType{Code: 3, Pkg: pkg}
 	ErrLogger  = errortype.ErrorType{Code: 4, Pkg: pkg}
 	ErrBinlog  = errortype.ErrorType{Code: 5, Pkg: pkg}
+	ErrParam   = errortype.ErrorType{Code: 6, Pkg: pkg}
 )

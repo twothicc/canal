@@ -19,27 +19,53 @@ import (
 	"go.uber.org/zap"
 )
 
+type Status struct {
+	IsRunning bool
+	Sources   []config.SourceConfig
+}
+
 // SyncManager - manages data sync
 type SyncManager interface {
 	Run(ctx context.Context, isLegacySync bool) error
 	Close(ctx context.Context)
+	GetId() uint32
+	Status() *Status
 }
 
 type syncManager struct {
+	isRunning    bool
 	cfg          *config.Config
 	eventHandler sync.SyncEventHandler
 	canal        *canal.Canal
 }
 
 // NewSyncManager - creates a SyncManager
-func NewSyncManager(ctx context.Context, cfg *config.Config, client *grpcclient.Client) SyncManager {
-	serverId := idgenerator.GetId()
-	cfg.ServerId = serverId
+func NewSyncManager(
+	ctx context.Context,
+	cfg *config.Config,
+	client *grpcclient.Client,
+
+) SyncManager {
+	cfg.ServerId = idgenerator.GetId()
 
 	return &syncManager{
+		isRunning:    false,
 		cfg:          cfg,
 		eventHandler: sync.NewSyncEventHandler(ctx, client, cfg.ServerId),
 	}
+}
+
+// Status - returns bool indicating whether syncmanager is running
+func (sm *syncManager) Status() *Status {
+	return &Status{
+		IsRunning: sm.isRunning,
+		Sources:   sm.cfg.Sources,
+	}
+}
+
+// GetId - returns the unique server id of this syncmanager
+func (sm *syncManager) GetId() uint32 {
+	return sm.cfg.ServerId
 }
 
 // Run - starts data sync
@@ -69,24 +95,35 @@ func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
 		return err
 	}
 
-	if err := sm.canal.CheckBinlogRowImage("FULL"); err != nil {
+	if binErr := sm.canal.CheckBinlogRowImage("FULL"); err != nil {
 		logger.WithContext(ctx).Error(
 			"[SyncManager.Run]invalid binlog row image",
 			zap.Uint32("server id", sm.cfg.ServerId),
-			zap.Error(err),
+			zap.Error(binErr),
 		)
 
 		return ErrBinlog.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
 	}
 
 	sm.canal.SetEventHandler(sm.eventHandler)
+	sm.isRunning = true
 
-	return sm.canal.Run()
+	return func() error {
+		if runErr := sm.canal.Run(); runErr != nil {
+			sm.isRunning = false
+
+			return runErr
+		}
+
+		return nil
+	}()
 }
 
 // Close - closes underlying canal, stopping data sync immediately
 func (sm *syncManager) Close(ctx context.Context) {
 	logger.WithContext(ctx).Info("[SyncManager.Close]closing", zap.Uint32("server id", sm.cfg.ServerId))
+
+	sm.isRunning = false
 
 	sm.canal.Close()
 }
@@ -230,11 +267,13 @@ func sourceKey(schema, table string) string {
 func initLogger(ctx context.Context, cfg *config.Config) (*log.Logger, error) {
 	logger.WithContext(ctx).Info("[SyncManager.initLogger]initializing logger", zap.Uint32("server id", cfg.ServerId))
 
-	if err := os.MkdirAll("synclog", os.ModePerm); err != nil {
-		return nil, ErrLogger.New(fmt.Sprintf("[SyncManager.initLogger]%s", err.Error()))
-	}
+	// if err := os.MkdirAll("synclog", os.ModePerm); err != nil {
+	// 	logger.WithContext(ctx).Error("[SyncManager.initLogger]fail to initialize canal logger dir", zap.Error(err))
 
-	logFileName := fmt.Sprintf("synclog/canal%d.log", cfg.ServerId)
+	// 	return nil, ErrLogger.New(fmt.Sprintf("[SyncManager.initLogger]%s", err.Error()))
+	// }
+
+	logFileName := fmt.Sprintf("canal%d.log", cfg.ServerId)
 
 	_, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, LOG_PERMISSION)
 	if err == nil {
