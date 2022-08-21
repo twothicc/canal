@@ -65,7 +65,7 @@ func (s *syncController) Remove(ctx context.Context, id uint32) error {
 		return ErrParam.New(fmt.Sprintf("[SyncManager.Remove]id %d does not exist", id))
 	} else {
 		if manager.Status().IsRunning {
-			manager.Close(ctx)
+			manager.Close()
 		}
 
 		delete(s.syncmanagers, id)
@@ -89,7 +89,7 @@ func (s *syncController) Start(ctx context.Context, id uint32, isLegacySync bool
 		return ErrParam.New(fmt.Sprintf("[SyncManager.Start]id %d does not exist", id))
 	} else {
 		if !manager.Status().IsRunning {
-			go manager.Run(ctx, isLegacySync)
+			go manager.Run(isLegacySync)
 		}
 	}
 
@@ -104,7 +104,7 @@ func (s *syncController) Stop(ctx context.Context, id uint32) error {
 		return ErrParam.New(fmt.Sprintf("[SyncManager.Stop]id %d does not exist", id))
 	} else {
 		if manager.Status().IsRunning {
-			manager.Close(ctx)
+			manager.Close()
 		}
 	}
 

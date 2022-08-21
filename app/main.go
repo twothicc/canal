@@ -32,15 +32,18 @@ func main() {
 	logger.WithContext(ctx).Info("loaded dependencies")
 
 	// testing purpose only
-	syncManager := syncmanager.NewSyncManager(
+	syncManager, err := syncmanager.NewSyncManager(
 		ctx,
 		dependencies.appConfig,
 		dependencies.grpcClient,
 	)
+	if err != nil {
+		panic(err)
+	}
 
 	dependencies.syncController.Add(ctx, syncManager.GetId(), syncManager)
 
-	if err := dependencies.syncController.Start(ctx, syncManager.GetId(), true); err != nil {
+	if err := dependencies.syncController.Start(ctx, syncManager.GetId(), false); err != nil {
 		logger.WithContext(ctx).Error("fail to run canal", zap.Error(err))
 	}
 

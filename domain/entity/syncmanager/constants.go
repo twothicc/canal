@@ -1,5 +1,7 @@
 package syncmanager
 
+import "time"
+
 // Special characters for parsing / querying tables
 const (
 	WILDCARD  = "*"
@@ -15,4 +17,9 @@ const (
 // Log constants
 const (
 	LOG_PERMISSION = 0o644
+)
+
+// sync constants
+const (
+	SAVE_INTERVAL = 3 * time.Second
 )

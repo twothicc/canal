@@ -9,8 +9,10 @@ import (
 	"regexp"
 
 	"github.com/go-mysql-org/go-mysql/canal"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/siddontang/go-log/log"
 	"github.com/twothicc/canal/config"
+	"github.com/twothicc/canal/domain/entity/syncmanager/savemanager"
 	"github.com/twothicc/canal/handlers/events/sync"
 	"github.com/twothicc/canal/tools/env"
 	"github.com/twothicc/canal/tools/idgenerator"
@@ -20,23 +22,28 @@ import (
 )
 
 type Status struct {
+	ServerId  uint32
 	IsRunning bool
 	Sources   []config.SourceConfig
 }
 
 // SyncManager - manages data sync
 type SyncManager interface {
-	Run(ctx context.Context, isLegacySync bool) error
-	Close(ctx context.Context)
+	Run(isLegacySync bool) error
+	Close()
 	GetId() uint32
 	Status() *Status
 }
 
 type syncManager struct {
 	isRunning    bool
+	ctx          context.Context
+	cancel       context.CancelFunc
 	cfg          *config.Config
 	eventHandler sync.SyncEventHandler
 	canal        *canal.Canal
+	saveInfo     *savemanager.SaveInfo
+	syncCh       chan mysql.Position
 }
 
 // NewSyncManager - creates a SyncManager
@@ -44,20 +51,70 @@ func NewSyncManager(
 	ctx context.Context,
 	cfg *config.Config,
 	client *grpcclient.Client,
-
-) SyncManager {
+) (SyncManager, error) {
 	cfg.ServerId = idgenerator.GetId()
 
-	return &syncManager{
-		isRunning:    false,
-		cfg:          cfg,
-		eventHandler: sync.NewSyncEventHandler(ctx, client, cfg.ServerId),
+	canalCfg := parseCanalCfg(ctx, cfg)
+
+	newCanal, err := canal.NewCanal(canalCfg)
+	if err != nil {
+		logger.WithContext(ctx).Error("[SyncManager.Run]fail to initialize canal", zap.Error(err))
+
+		return nil, ErrConfig.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
 	}
+
+	if err = parseSource(ctx, cfg, newCanal); err != nil {
+		logger.WithContext(ctx).Error(
+			"[SyncManager.Run]fail to parse source",
+			zap.Uint32("server id", cfg.ServerId),
+			zap.Error(err),
+		)
+
+		return nil, err
+	}
+
+	if binErr := newCanal.CheckBinlogRowImage("FULL"); err != nil {
+		logger.WithContext(ctx).Error(
+			"[SyncManager.Run]invalid binlog row image",
+			zap.Uint32("server id", cfg.ServerId),
+			zap.Error(binErr),
+		)
+
+		return nil, ErrBinlog.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
+	}
+
+	syncCh := make(chan mysql.Position, 4096)
+
+	saveInfo, saveErr := savemanager.LoadSaveInfo(ctx, cfg.ServerId)
+	if saveErr != nil {
+		logger.WithContext(ctx).Error(
+			"[SyncManager.Run]fail to load save info",
+			zap.Uint32("server id", cfg.ServerId),
+			zap.Error(err),
+		)
+
+		return nil, ErrSave.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	newCanal.SetEventHandler(sync.NewSyncEventHandler(ctx, client, cfg.ServerId, syncCh))
+
+	return &syncManager{
+		isRunning: false,
+		ctx:       ctx,
+		cancel:    cancel,
+		cfg:       cfg,
+		canal:     newCanal,
+		saveInfo:  saveInfo,
+		syncCh:    syncCh,
+	}, nil
 }
 
 // Status - returns bool indicating whether syncmanager is running
 func (sm *syncManager) Status() *Status {
 	return &Status{
+		ServerId:  sm.cfg.ServerId,
 		IsRunning: sm.isRunning,
 		Sources:   sm.cfg.Sources,
 	}
@@ -71,76 +128,95 @@ func (sm *syncManager) GetId() uint32 {
 // Run - starts data sync
 //
 // isLegacySync indicates whether the sync will include existing records
-func (sm *syncManager) Run(ctx context.Context, isLegacySync bool) error {
-	logger.WithContext(ctx).Info("[SyncManager.Run]running data sync", zap.Uint32("server id", sm.cfg.ServerId))
+func (sm *syncManager) Run(isLegacySync bool) error {
+	logger.WithContext(sm.ctx).Info("[SyncManager.Run]running data sync", zap.Uint32("server id", sm.cfg.ServerId))
 
-	canalCfg := parseCanalCfg(ctx, sm.cfg, isLegacySync)
-
-	newCanal, err := canal.NewCanal(canalCfg)
-	if err != nil {
-		logger.WithContext(ctx).Error("[SyncManager.Run]fail to initialize canal", zap.Error(err))
-
-		return ErrConfig.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
-	}
-
-	sm.canal = newCanal
-
-	if err = sm.parseSource(ctx); err != nil {
-		logger.WithContext(ctx).Error(
-			"[SyncManager.Run]fail to parse source",
-			zap.Uint32("server id", sm.cfg.ServerId),
-			zap.Error(err),
-		)
-
-		return err
-	}
-
-	if binErr := sm.canal.CheckBinlogRowImage("FULL"); err != nil {
-		logger.WithContext(ctx).Error(
-			"[SyncManager.Run]invalid binlog row image",
-			zap.Uint32("server id", sm.cfg.ServerId),
-			zap.Error(binErr),
-		)
-
-		return ErrBinlog.New(fmt.Sprintf("[SyncManager.Run]%s", err.Error()))
-	}
-
-	sm.canal.SetEventHandler(sm.eventHandler)
 	sm.isRunning = true
 
-	return func() error {
-		if runErr := sm.canal.Run(); runErr != nil {
-			sm.isRunning = false
+	go sm.syncLoop(mysql.Position{
+		Name: sm.saveInfo.Name,
+		Pos:  sm.saveInfo.Pos,
+	})
 
-			return runErr
+	return func() error {
+		var err error
+		if isLegacySync {
+			if runErr := sm.canal.Run(); runErr != nil {
+				err = runErr
+
+				sm.cancel()
+			}
+		} else {
+			pos := sm.saveInfo.Position()
+
+			if runErr := sm.canal.RunFrom(pos); runErr != nil {
+				err = runErr
+
+				sm.cancel()
+			}
 		}
 
-		return nil
+		sm.isRunning = false
+		return err
 	}()
 }
 
 // Close - closes underlying canal, stopping data sync immediately
-func (sm *syncManager) Close(ctx context.Context) {
-	logger.WithContext(ctx).Info("[SyncManager.Close]closing", zap.Uint32("server id", sm.cfg.ServerId))
+func (sm *syncManager) Close() {
+	logger.WithContext(sm.ctx).Info("[SyncManager.Close]closing", zap.Uint32("server id", sm.cfg.ServerId))
 
 	sm.isRunning = false
 
+	sm.cancel()
+	sm.saveInfo.Close(sm.ctx)
 	sm.canal.Close()
 }
 
-// parseSource - parses special characters in tables from config source into valid tables
-func (sm *syncManager) parseSource(ctx context.Context) error {
-	logger.WithContext(ctx).Info("[SyncManager.parseSource]parsing source", zap.Uint32("server id", sm.cfg.ServerId))
+// syncLoop - saves binlog position to file in intervals
+func (sm *syncManager) syncLoop(initPos mysql.Position) {
+	ticker := time.NewTicker(SAVE_INTERVAL)
+	defer ticker.Stop()
 
-	if sm.canal == nil {
+	currPos := initPos
+
+	for {
+		isSavePos := false
+
+		select {
+		case pos := <-sm.syncCh:
+			currPos = pos
+		case <-ticker.C:
+			isSavePos = true
+		case <-sm.ctx.Done():
+			return
+		}
+
+		if isSavePos {
+			if err := sm.saveInfo.Save(sm.ctx, currPos); err != nil {
+				logger.WithContext(sm.ctx).Error("[SyncManager.syncLoop]fail to save", zap.Error(err))
+				sm.cancel()
+
+				return
+			}
+
+			isSavePos = false
+		}
+	}
+}
+
+// parseSource - parses special characters in tables from config source into valid tables
+func parseSource(ctx context.Context, cfg *config.Config, canal *canal.Canal) error {
+	logger.WithContext(ctx).Info("[SyncManager.parseSource]parsing source", zap.Uint32("server id", cfg.ServerId))
+
+	if canal == nil {
 		logger.WithContext(ctx).Error("[SyncManager.parseSource]canal not initialized")
 
 		return ErrNoCanal.New("[SyncManager.parseSource]canal not initialized")
 	}
 
-	wildCardTables := make(map[string][]string, len(sm.cfg.Sources))
+	wildCardTables := make(map[string][]string, len(cfg.Sources))
 
-	for _, source := range sm.cfg.Sources {
+	for _, source := range cfg.Sources {
 		if !isValidTable(source.Tables) {
 			logger.WithContext(ctx).Error(
 				"[SyncManager.parseSource]invalid tables",
@@ -169,7 +245,7 @@ func (sm *syncManager) parseSource(ctx context.Context) error {
 					tableParam = ANY_TABLE
 				}
 
-				res, err := sm.canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
+				res, err := canal.Execute(WILDCARD_TABLE_SQL, tableParam, source.Schema)
 				if err != nil {
 					logger.WithContext(ctx).Error(
 						"[SyncManager.parseSource]fail to query table info",
@@ -187,11 +263,11 @@ func (sm *syncManager) parseSource(ctx context.Context) error {
 					tables = append(tables, tableName)
 				}
 
-				sm.canal.AddDumpTables(source.Schema, tables...)
+				canal.AddDumpTables(source.Schema, tables...)
 
 				wildCardTables[key] = tables
 			} else {
-				sm.canal.AddDumpTables(source.Schema, table)
+				canal.AddDumpTables(source.Schema, table)
 			}
 		}
 	}
@@ -199,11 +275,10 @@ func (sm *syncManager) parseSource(ctx context.Context) error {
 	return nil
 }
 
-func parseCanalCfg(ctx context.Context, cfg *config.Config, isLegacySync bool) *canal.Config {
+func parseCanalCfg(ctx context.Context, cfg *config.Config) *canal.Config {
 	logger.WithContext(ctx).Info(
 		"[SyncManager.parseCanalCfg]parsing canal configs",
 		zap.Uint32("server id", cfg.ServerId),
-		zap.Bool("isLegacySync", isLegacySync),
 	)
 
 	canalCfg := canal.NewDefaultConfig()
@@ -228,10 +303,8 @@ func parseCanalCfg(ctx context.Context, cfg *config.Config, isLegacySync bool) *
 
 	canalCfg.Logger = canalLogger
 
-	if isLegacySync {
-		dumpCfg := cfg.DumpConfig
-		canalCfg.Dump.ExecutionPath = dumpCfg.DumpExecPath
-	}
+	dumpCfg := cfg.DumpConfig
+	canalCfg.Dump.ExecutionPath = dumpCfg.DumpExecPath
 
 	for _, source := range cfg.Sources {
 		for _, table := range source.Tables {

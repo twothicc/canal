@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/go-mysql-org/go-mysql/canal"
+	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/twothicc/common-go/grpcclient"
 	"github.com/twothicc/common-go/logger"
 	pb "github.com/twothicc/protobuf/datasync/v1"
@@ -22,18 +24,42 @@ type syncEventHandler struct {
 	ctx      context.Context
 	client   *grpcclient.Client
 	serverId uint32
+	syncCh   chan mysql.Position
 }
 
 func NewSyncEventHandler(
 	ctx context.Context,
 	client *grpcclient.Client,
 	serverId uint32,
+	syncCh chan mysql.Position,
 ) SyncEventHandler {
 	return &syncEventHandler{
 		ctx:      ctx,
 		client:   client,
 		serverId: serverId,
+		syncCh:   syncCh,
 	}
+}
+
+func (se *syncEventHandler) OnRotate(e *replication.RotateEvent) error {
+	pos := mysql.Position{
+		Name: string(e.NextLogName),
+		Pos:  uint32(e.Position),
+	}
+
+	se.syncCh <- pos
+
+	return se.ctx.Err()
+}
+
+func (se *syncEventHandler) OnDDL(nextPos mysql.Position, _ *replication.QueryEvent) error {
+	se.syncCh <- nextPos
+	return se.ctx.Err()
+}
+
+func (se *syncEventHandler) OnXID(nextPos mysql.Position) error {
+	se.syncCh <- nextPos
+	return se.ctx.Err()
 }
 
 func (se *syncEventHandler) OnRow(e *canal.RowsEvent) error {
