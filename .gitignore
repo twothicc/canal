@@ -25,7 +25,10 @@ build
 
 # log files
 server.log
-synclog/
+.log
+
+# save files
+syncdata
 
 # vscode
 .vscode/
