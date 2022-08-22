@@ -15,6 +15,7 @@ type SourceConfig struct {
 type DbConfig struct {
 	Addr    string `toml:"addr"`
 	User    string `toml:"user"`
+	Pass    string
 	Charset string `toml:"charset"`
 	Flavor  string `toml:"flavor"`
 }

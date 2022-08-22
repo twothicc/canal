@@ -12,13 +12,13 @@ import (
 	"go.uber.org/zap"
 )
 
-type dependencies struct {
-	grpcClient     *grpcclient.Client
-	appConfig      *config.Config
-	syncController synccontroller.SyncController
+type Dependencies struct {
+	GrpcClient     *grpcclient.Client
+	AppConfig      *config.Config
+	SyncController synccontroller.SyncController
 }
 
-func initDependencies(ctx context.Context) *dependencies {
+func initDependencies(ctx context.Context) *Dependencies {
 	appConfig, err := config.NewConfig("./conf/app.toml")
 	if err != nil {
 		logger.WithContext(ctx).Error("[initDependencies]fail to load config", zap.Error(err))
@@ -34,9 +34,9 @@ func initDependencies(ctx context.Context) *dependencies {
 
 	syncController := synccontroller.NewSyncController(ctx)
 
-	return &dependencies{
-		grpcClient:     client,
-		appConfig:      appConfig,
-		syncController: syncController,
+	return &Dependencies{
+		GrpcClient:     client,
+		AppConfig:      appConfig,
+		SyncController: syncController,
 	}
 }

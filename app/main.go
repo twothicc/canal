@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/twothicc/canal/domain/entity/syncmanager"
+	"github.com/twothicc/canal/infra/httprouter"
 	"github.com/twothicc/canal/tools/env"
 	"github.com/twothicc/common-go/logger"
 	"go.uber.org/zap"
@@ -27,30 +29,39 @@ func main() {
 
 	dependencies := initDependencies(ctx)
 
-	go dependencies.grpcClient.ListenSignals(ctx)
-
 	logger.WithContext(ctx).Info("loaded dependencies")
 
+	// TODO read addr from toml config
+	httpServer := &http.Server{
+		Addr: "localhost:3030",
+		Handler: httprouter.NewHTTPRouter(ctx, &httprouter.HttpRouterDependencies{
+			GrpcClient:     dependencies.GrpcClient,
+			Cfg:            dependencies.AppConfig,
+			SyncController: dependencies.SyncController,
+		}),
+	}
+
 	// testing purpose only
+	dependencies.AppConfig.DbConfig.Pass = env.EnvConfigs.DbPass
 	syncManager, err := syncmanager.NewSyncManager(
 		ctx,
-		dependencies.appConfig,
-		dependencies.grpcClient,
+		dependencies.AppConfig,
+		dependencies.GrpcClient,
 	)
 	if err != nil {
 		panic(err)
 	}
 
-	dependencies.syncController.Add(ctx, syncManager.GetId(), syncManager)
+	dependencies.SyncController.Add(ctx, syncManager.GetId(), syncManager)
 
-	if err := dependencies.syncController.Start(ctx, syncManager.GetId(), false); err != nil {
+	if err := dependencies.SyncController.Start(ctx, syncManager.GetId(), false); err != nil {
 		logger.WithContext(ctx).Error("fail to run canal", zap.Error(err))
 	}
 
-	ListenSignals(ctx, dependencies)
+	ListenSignals(ctx, httpServer, dependencies)
 }
 
-func ListenSignals(ctx context.Context, d *dependencies) {
+func ListenSignals(ctx context.Context, httpServer *http.Server, d *Dependencies) {
 	signalChan := make(chan os.Signal, 1)
 
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -60,8 +71,19 @@ func ListenSignals(ctx context.Context, d *dependencies) {
 	logger.WithContext(ctx).Info("receive signal, stopping server", zap.String("signal", sig.String()))
 	time.Sleep(1 * time.Second)
 
-	if err := d.syncController.Close(ctx); err != nil {
-		logger.WithContext(ctx).Error("[Dependencies.ListenSignals]fail to close server manager", zap.Error(err))
+	d.GrpcClient.Close(ctx)
+	logger.WithContext(ctx).Info("[Main.ListenSignals]closed grpc clients")
+
+	if err := d.SyncController.Close(ctx); err != nil {
+		logger.WithContext(ctx).Error("[Main.ListenSignals]fail to close sync controller", zap.Error(err))
+	} else {
+		logger.WithContext(ctx).Info("[Main.ListenSignals]closed sync controller")
+	}
+
+	if err := httpServer.Shutdown(ctx); err != nil {
+		logger.WithContext(ctx).Error("[Main.ListenSignals]fail to gracefully shutdown http server", zap.Error(err))
+	} else {
+		logger.WithContext(ctx).Info("[Main.ListenSignals]gracefully shutdown http server")
 	}
 
 	logger.Sync()

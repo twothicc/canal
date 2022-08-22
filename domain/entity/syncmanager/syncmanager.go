@@ -14,7 +14,6 @@ import (
 	"github.com/twothicc/canal/config"
 	"github.com/twothicc/canal/domain/entity/syncmanager/savemanager"
 	"github.com/twothicc/canal/handlers/events/sync"
-	"github.com/twothicc/canal/tools/env"
 	"github.com/twothicc/canal/tools/idgenerator"
 	"github.com/twothicc/common-go/grpcclient"
 	"github.com/twothicc/common-go/logger"
@@ -288,7 +287,7 @@ func parseCanalCfg(ctx context.Context, cfg *config.Config) *canal.Config {
 	dbCfg := cfg.DbConfig
 	canalCfg.Addr = dbCfg.Addr
 	canalCfg.User = dbCfg.User
-	canalCfg.Password = env.EnvConfigs.DbPass
+	canalCfg.Password = dbCfg.Pass
 	canalCfg.Charset = dbCfg.Charset
 
 	canalCfg.ServerID = cfg.ServerId
