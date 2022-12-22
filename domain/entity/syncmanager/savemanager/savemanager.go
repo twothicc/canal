@@ -27,7 +27,13 @@ type SaveInfo struct {
 	Pos          uint32 `toml:"bin_pos"`
 }
 
-func LoadSaveInfo(ctx context.Context, serverId uint32) (*SaveInfo, error) {
+type ISaveInfo interface {
+	Save(ctx context.Context, pos mysql.Position) error
+	Position() mysql.Position
+	Close(ctx context.Context) error
+}
+
+func LoadSaveInfo(ctx context.Context, serverId uint32) (ISaveInfo, error) {
 	var s SaveInfo
 
 	dir := path.Join(SAVE_DIR, strconv.FormatUint(uint64(serverId), BASE10))

@@ -37,7 +37,7 @@ type SyncManager interface {
 type syncManager struct {
 	ctx          context.Context
 	eventHandler sync.SyncEventHandler
-	saveInfo     *savemanager.SaveInfo
+	saveInfo     savemanager.ISaveInfo
 	cancel       context.CancelFunc
 	cfg          *config.Config
 	canal        *canal.Canal
@@ -133,8 +133,8 @@ func (sm *syncManager) Run(isLegacySync bool) error {
 	sm.isRunning = true
 
 	go sm.syncLoop(mysql.Position{
-		Name: sm.saveInfo.Name,
-		Pos:  sm.saveInfo.Pos,
+		Name: sm.saveInfo.Position().Name,
+		Pos:  sm.saveInfo.Position().Pos,
 	})
 
 	return func() error {
