@@ -9,9 +9,9 @@ import (
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/twothicc/common-go/grpcclient"
+	"github.com/twothicc/canal/config"
+	"github.com/twothicc/canal/handlers/events/kafka"
 	"github.com/twothicc/common-go/logger"
-	pb "github.com/twothicc/protobuf/datasync/v1"
 	"go.uber.org/zap"
 )
 
@@ -21,24 +21,41 @@ type SyncEventHandler interface {
 
 type syncEventHandler struct {
 	canal.DummyEventHandler
-	ctx      context.Context
-	client   *grpcclient.Client
-	syncCh   chan mysql.Position
-	serverId uint32
+	ctx         context.Context
+	msgProducer kafka.IMessageProducer
+	syncCh      chan mysql.Position
+	serverId    uint32
 }
+
+type CloseEventHandler func() error
 
 func NewSyncEventHandler(
 	ctx context.Context,
-	client *grpcclient.Client,
+	kafkaCfg config.KafkaConfig,
 	serverId uint32,
 	syncCh chan mysql.Position,
-) SyncEventHandler {
-	return &syncEventHandler{
-		ctx:      ctx,
-		client:   client,
-		serverId: serverId,
-		syncCh:   syncCh,
+) (SyncEventHandler, CloseEventHandler, error) {
+	msgProducer, err := kafka.NewMessageProducer(ctx, kafkaCfg)
+	if err != nil {
+		return nil, nil, ErrConstructor.Wrap(err)
 	}
+
+	return &syncEventHandler{
+			ctx:         ctx,
+			msgProducer: msgProducer,
+			serverId:    serverId,
+			syncCh:      syncCh,
+		}, func() error {
+			if closeErr := msgProducer.Close(); closeErr != nil {
+				logger.WithContext(ctx).Error(
+					"[NewSyncEventHandler]fail to close message producer. Possible memory leak",
+				)
+
+				return closeErr
+			}
+
+			return nil
+		}, nil
 }
 
 func (se *syncEventHandler) OnRotate(e *replication.RotateEvent) error {
@@ -74,39 +91,19 @@ func (se *syncEventHandler) OnRow(e *canal.RowsEvent) error {
 		return ErrEvent.New("[SyncEventHandler.OnRow]rows event is nil")
 	}
 
-	resp := &pb.SyncResponse{}
-
-	req, err := se.parseRowsEvent(e)
+	msg, err := se.parseRowsEvent(e)
 	if err == nil {
-		if callErr := se.client.Call(
-			se.ctx,
-			"localhost:8080", "/datasync.v1.SyncService/Sync",
-			req, resp,
-		); callErr != nil {
-			logger.WithContext(se.ctx).Error(
-				"[SyncEventHandler.OnRow]fail to call",
-				zap.Uint32("server id", se.serverId),
-				zap.Error(callErr),
-			)
-		} else {
-			logger.WithContext(se.ctx).Info(
-				"[SyncEventHandler.OnRow]handled rows event",
-				zap.Uint32("server id", se.serverId),
-				zap.String("msg", resp.GetMsg()),
-			)
+		if produceErr := se.msgProducer.Produce(se.ctx, msg); produceErr != nil {
+			logger.WithContext(se.ctx).Error(fmt.Sprintf("[SyncEventHandler.OnRow]%s", produceErr.Error()))
+
+			return ErrProduce.Wrap(err)
 		}
-	} else {
-		logger.WithContext(se.ctx).Warn(
-			"[SyncEventHandler.OnRow]fail to handle rows event",
-			zap.Uint32("server id", se.serverId),
-			zap.Error(err),
-		)
 	}
 
 	return nil
 }
 
-func (se *syncEventHandler) parseRowsEvent(e *canal.RowsEvent) (*pb.SyncRequest, error) {
+func (se *syncEventHandler) parseRowsEvent(e *canal.RowsEvent) (kafka.IMessage, error) {
 	// parse primary keys
 	pk := []string{}
 
@@ -181,7 +178,7 @@ func (se *syncEventHandler) parseRowsEvent(e *canal.RowsEvent) (*pb.SyncRequest,
 		}
 	}
 
-	return &pb.SyncRequest{
+	return &kafka.SyncMessage{
 		Ctimestamp: ctimestamp,
 		Mtimestamp: mtimestamp,
 		Action:     e.Action,

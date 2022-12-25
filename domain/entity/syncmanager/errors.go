@@ -15,4 +15,5 @@ var (
 	ErrBinlog  = errortype.ErrorType{Code: 5, Pkg: pkg}
 	ErrParam   = errortype.ErrorType{Code: 6, Pkg: pkg}
 	ErrSave    = errortype.ErrorType{Code: 7, Pkg: pkg}
+	ErrEvent   = errortype.ErrorType{Code: 8, Pkg: pkg}
 )

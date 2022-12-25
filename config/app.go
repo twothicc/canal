@@ -20,15 +20,21 @@ type DbConfig struct {
 	Flavor  string `toml:"flavor"`
 }
 
+type KafkaConfig struct {
+	Topic      string   `toml:"topic"`
+	BrokerList []string `toml:"broker_list"`
+}
+
 type DumpConfig struct {
 	DumpExecPath string `toml:"mysqldump_path"`
 }
 
 type Config struct {
-	DbConfig   DbConfig       `toml:"database"`
-	DumpConfig DumpConfig     `toml:"dump"`
-	Sources    []SourceConfig `toml:"source"`
-	ServerId   uint32
+	DbConfig    DbConfig       `toml:"database"`
+	KafkaConfig KafkaConfig    `toml:"kafka"`
+	DumpConfig  DumpConfig     `toml:"dump"`
+	Sources     []SourceConfig `toml:"source"`
+	ServerId    uint32
 }
 
 func NewConfig(path string) (*Config, error) {

@@ -15,7 +15,6 @@ import (
 	"github.com/twothicc/canal/domain/entity/syncmanager/savemanager"
 	"github.com/twothicc/canal/handlers/events/sync"
 	"github.com/twothicc/canal/tools/idgenerator"
-	"github.com/twothicc/common-go/grpcclient"
 	"github.com/twothicc/common-go/logger"
 	"go.uber.org/zap"
 )
@@ -35,21 +34,21 @@ type SyncManager interface {
 }
 
 type syncManager struct {
-	ctx          context.Context
-	eventHandler sync.SyncEventHandler
-	saveInfo     savemanager.ISaveInfo
-	cancel       context.CancelFunc
-	cfg          *config.Config
-	canal        *canal.Canal
-	syncCh       chan mysql.Position
-	isRunning    bool
+	ctx               context.Context
+	eventHandler      sync.SyncEventHandler
+	saveInfo          savemanager.ISaveInfo
+	closeEventHandler sync.CloseEventHandler
+	cancel            context.CancelFunc
+	cfg               *config.Config
+	canal             *canal.Canal
+	syncCh            chan mysql.Position
+	isRunning         bool
 }
 
 // NewSyncManager - creates a SyncManager
 func NewSyncManager(
 	ctx context.Context,
 	cfg *config.Config,
-	client *grpcclient.Client,
 ) (SyncManager, error) {
 	cfg.ServerId = idgenerator.GetId()
 
@@ -97,16 +96,26 @@ func NewSyncManager(
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	newCanal.SetEventHandler(sync.NewSyncEventHandler(ctx, client, cfg.ServerId, syncCh))
+	eventHandler, closeEventHandler, eventHandlerErr := sync.NewSyncEventHandler(
+		ctx, cfg.KafkaConfig, cfg.ServerId, syncCh)
+	if eventHandlerErr != nil {
+		logger.WithContext(ctx).Error(fmt.Sprintf("[SyncManager.Run]%s", eventHandlerErr.Error()))
+		cancel()
+
+		return nil, ErrEvent.Wrap(eventHandlerErr)
+	}
+
+	newCanal.SetEventHandler(eventHandler)
 
 	return &syncManager{
-		isRunning: false,
-		ctx:       ctx,
-		cancel:    cancel,
-		cfg:       cfg,
-		canal:     newCanal,
-		saveInfo:  saveInfo,
-		syncCh:    syncCh,
+		isRunning:         false,
+		ctx:               ctx,
+		cancel:            cancel,
+		closeEventHandler: closeEventHandler,
+		cfg:               cfg,
+		canal:             newCanal,
+		saveInfo:          saveInfo,
+		syncCh:            syncCh,
 	}, nil
 }
 
@@ -169,7 +178,23 @@ func (sm *syncManager) Close() {
 	sm.isRunning = false
 
 	sm.cancel()
-	sm.saveInfo.Close(sm.ctx)
+
+	if saveErr := sm.saveInfo.Close(sm.ctx); saveErr != nil {
+		logger.WithContext(sm.ctx).Error(
+			"[SyncManager.Close]fail to save saveInfo",
+			zap.Error(saveErr),
+			zap.Uint32("server id", sm.cfg.ServerId),
+		)
+	}
+
+	if eventErr := sm.closeEventHandler(); eventErr != nil {
+		logger.WithContext(sm.ctx).Error(
+			"[SyncManager.Close]fail to close eventHandler",
+			zap.Error(eventErr),
+			zap.Uint32("server id", sm.cfg.ServerId),
+		)
+	}
+
 	sm.canal.Close()
 }
 

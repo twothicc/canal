@@ -6,6 +6,10 @@ user = "test"
 charset = "utf8mb4"
 flavor = "mysql"
 
+[kafka]
+topic = "mySql_test_1"
+broker_list = ["127.0.0.1:9092"]
+
 [dump]
 mysqldump_path = "/mnt/c/Program Files/MySQL/MySQL Server 8.0/bin/mysqldump.exe"
 
