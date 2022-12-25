@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/twothicc/canal/vendor/github.com/twothicc/common-go/logger"
+	"github.com/twothicc/common-go/logger"
 	"go.uber.org/zap"
 )
 
