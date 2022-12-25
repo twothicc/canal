@@ -26,7 +26,6 @@ linters:
     - deadcode
     - depguard
     - dogsled
-    - dupl
     - errcheck
     - exportloopref
     - exhaustive
@@ -41,7 +40,6 @@ linters:
     - govet
     - ineffassign
     - misspell
-    - nolintlint
     - nakedret
     - prealloc
     - predeclared

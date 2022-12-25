@@ -14,6 +14,7 @@ type envConfigs struct {
 	Domain      string
 	Port        string
 	Env         string
+	DbPass      string
 }
 
 var EnvConfigs = &envConfigs{}
@@ -28,6 +29,7 @@ func Init(ctx context.Context) {
 	EnvConfigs.Domain = os.Getenv(DOMAIN)
 	EnvConfigs.Port = os.Getenv(PORT)
 	EnvConfigs.Env = os.Getenv(ENV)
+	EnvConfigs.DbPass = os.Getenv(DATABASE_PASS)
 }
 
 // IsTest - Indicates if environment is test or production

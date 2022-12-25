@@ -2,7 +2,7 @@
 all: vendors format lint compile
 
 fieldAlignment:
-	fieldalignment -fix github.com/twothicc/canal
+	fieldalignment -fix github.com/twothicc/canal/handlers/sync
 
 format:
 	gofmt -s -w $$(find . -type f -name '*.go'| grep -v "/vendor/")

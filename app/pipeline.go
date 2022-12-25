@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/twothicc/canal/config"
+	"github.com/twothicc/canal/domain/entity/synccontroller"
 	"github.com/twothicc/canal/tools/env"
 	"github.com/twothicc/common-go/grpcclient"
 	"github.com/twothicc/common-go/grpcclient/pool"
@@ -11,15 +12,16 @@ import (
 	"go.uber.org/zap"
 )
 
-type dependencies struct {
-	grpcClient *grpcclient.Client
-	appConfig  *config.Config
+type Dependencies struct {
+	GrpcClient     *grpcclient.Client
+	AppConfig      *config.Config
+	SyncController synccontroller.SyncController
 }
 
-func initDependencies(ctx context.Context) *dependencies {
+func initDependencies(ctx context.Context) *Dependencies {
 	appConfig, err := config.NewConfig("./conf/app.toml")
 	if err != nil {
-		logger.WithContext(ctx).Error("fail to load config", zap.Error(err))
+		logger.WithContext(ctx).Error("[initDependencies]fail to load config", zap.Error(err))
 	}
 
 	clientConfigs := grpcclient.GetDefaultClientConfigs(
@@ -30,8 +32,11 @@ func initDependencies(ctx context.Context) *dependencies {
 
 	client := grpcclient.NewClient(ctx, clientConfigs)
 
-	return &dependencies{
-		grpcClient: client,
-		appConfig:  appConfig,
+	syncController := synccontroller.NewSyncController(ctx)
+
+	return &Dependencies{
+		GrpcClient:     client,
+		AppConfig:      appConfig,
+		SyncController: syncController,
 	}
 }

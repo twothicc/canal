@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/BurntSushi/toml"
 )
@@ -13,24 +13,32 @@ type SourceConfig struct {
 }
 
 type DbConfig struct {
-	DbAddr    string `toml:"addr"`
-	DbUser    string `toml:"user"`
-	DbPass    string `toml:"pass"`
-	DbCharset string `toml:"charset"`
-	DbFlavor  string `toml:"flavor"`
+	Addr    string `toml:"addr"`
+	User    string `toml:"user"`
+	Pass    string
+	Charset string `toml:"charset"`
+	Flavor  string `toml:"flavor"`
+}
+
+type KafkaConfig struct {
+	Topic      string   `toml:"topic"`
+	BrokerList []string `toml:"broker_list"`
+}
+
+type DumpConfig struct {
+	DumpExecPath string `toml:"mysqldump_path"`
 }
 
 type Config struct {
-	DbConfig DbConfig `toml:"database"`
-
-	ServerId     uint32 `toml:"server_id"`
-	DumpExecPath string `toml:"dump.mysqldump_path"`
-
-	Sources []SourceConfig `toml:"source"`
+	DbConfig    DbConfig       `toml:"database"`
+	KafkaConfig KafkaConfig    `toml:"kafka"`
+	DumpConfig  DumpConfig     `toml:"dump"`
+	Sources     []SourceConfig `toml:"source"`
+	ServerId    uint32
 }
 
 func NewConfig(path string) (*Config, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, ErrNotFound.New(fmt.Sprintf("[NewConfig]%s", err.Error()))
 	}
