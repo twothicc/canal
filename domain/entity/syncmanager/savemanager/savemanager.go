@@ -63,7 +63,7 @@ func LoadSaveInfo(ctx context.Context, serverId uint32) (ISaveInfo, error) {
 }
 
 func (s *SaveInfo) Save(ctx context.Context, pos mysql.Position) error {
-	logger.WithContext(ctx).Info(fmt.Sprintf("[SaveManager.Save]%s", pos))
+	logger.WithContext(ctx).Debug(fmt.Sprintf("[SaveManager.Save]%s", pos))
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
