@@ -3,18 +3,18 @@ package sync
 import "github.com/twothicc/canal/domain/entity/syncmanager"
 
 type RunResponse struct {
-	ServerId uint32
 	Msg      string
+	ServerId uint32
 }
 
 type StopResponse struct {
-	ServerId uint32
 	Msg      string
+	ServerId uint32
 }
 
 type DeleteResponse struct {
-	ServerId uint32
 	Msg      string
+	ServerId uint32
 }
 
 type StatusResponse struct {

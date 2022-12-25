@@ -22,14 +22,15 @@ func NewHTTPRouter(ctx context.Context, dependencies *HttpRouterDependencies) *g
 	router.Use(ErrorHandler(ctx))
 
 	syncGroup := router.Group("/sync")
-	{
-		syncGroup.POST("/run", sync.NewRunHandler(
-			ctx,
-			dependencies.Cfg,
-			dependencies.GrpcClient,
-			dependencies.SyncController,
-		))
-	}
+
+	syncGroup.POST("/run", sync.NewRunHandler(
+		ctx,
+		dependencies.Cfg,
+		dependencies.SyncController,
+	))
+	syncGroup.POST("/status", sync.NewStatusHandler(ctx, dependencies.SyncController))
+	syncGroup.POST("/stop", sync.NewStopHandler(ctx, dependencies.SyncController))
+	syncGroup.POST("/delete", sync.NewDeleteHandler(ctx, dependencies.SyncController))
 
 	return router
 }
