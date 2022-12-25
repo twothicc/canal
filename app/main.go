@@ -18,6 +18,8 @@ import (
 
 var ctx = context.Background()
 
+const READ_HEADER_TIMEOUT = 2
+
 func main() {
 	logger.InitLogger(zapcore.InfoLevel)
 
@@ -39,14 +41,15 @@ func main() {
 			Cfg:            dependencies.AppConfig,
 			SyncController: dependencies.SyncController,
 		}),
+		ReadHeaderTimeout: READ_HEADER_TIMEOUT * time.Second,
 	}
 
 	// testing purpose only
 	dependencies.AppConfig.DbConfig.Pass = env.EnvConfigs.DbPass
+
 	syncManager, err := syncmanager.NewSyncManager(
 		ctx,
 		dependencies.AppConfig,
-		dependencies.GrpcClient,
 	)
 	if err != nil {
 		panic(err)
