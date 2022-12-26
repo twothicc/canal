@@ -1,5 +1,7 @@
 package sync
 
+import "time"
+
 const (
 	PRIMARY_KEY = "PRIMARY"
 	CREATE_TIME = "ctime"
@@ -15,4 +17,9 @@ const (
 const (
 	BASE10 = 10
 	BIT32  = 32
+)
+
+const (
+	RETRY_SECONDS   = 10
+	FLUSH_FREQUENCY = 100 * time.Millisecond
 )

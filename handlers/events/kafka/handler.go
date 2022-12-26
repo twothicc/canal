@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/twothicc/canal/config"
 	"github.com/twothicc/common-go/logger"
@@ -12,13 +13,14 @@ import (
 )
 
 type MessageProducer struct {
-	sarama.SyncProducer
-	topic string
+	sarama.AsyncProducer
+	inputCh chan<- *sarama.ProducerMessage
+	topic   string
 }
 
 type IMessageProducer interface {
-	sarama.SyncProducer
-	Produce(ctx context.Context, msg IMessage) error
+	sarama.AsyncProducer
+	Produce(ctx context.Context, msg IMessage)
 }
 
 func NewMessageProducer(
@@ -29,10 +31,11 @@ func NewMessageProducer(
 
 	saramaCfg.Producer.Return.Successes = true
 	saramaCfg.Producer.Return.Errors = true
-	saramaCfg.Producer.RequiredAcks = sarama.WaitForAll
-	saramaCfg.Producer.Retry.Max = 10
+	saramaCfg.Producer.RequiredAcks = sarama.WaitForLocal
+	saramaCfg.Producer.Retry.Max = int(kafkaCfg.Retry)
+	saramaCfg.Producer.Flush.Frequency = time.Duration(kafkaCfg.Flush) * time.Millisecond
 
-	producer, err := sarama.NewSyncProducer(kafkaCfg.BrokerList, saramaCfg)
+	producer, err := sarama.NewAsyncProducer(kafkaCfg.BrokerList, saramaCfg)
 	if err != nil {
 		logger.WithContext(ctx).Error("[newMessageProducer]Failed to start Sarama producer", zap.Error(err))
 
@@ -40,24 +43,38 @@ func NewMessageProducer(
 	}
 
 	return &MessageProducer{
-		SyncProducer: producer,
-		topic:        kafkaCfg.Topic,
+		AsyncProducer: producer,
+		topic:         kafkaCfg.Topic,
 	}, nil
 }
 
-func (m *MessageProducer) Produce(ctx context.Context, msg IMessage) error {
+func (m *MessageProducer) Produce(ctx context.Context, msg IMessage) {
+	if m.inputCh == nil {
+		go func() {
+			for {
+				select {
+				case successMsg := <-m.Successes():
+					logger.WithContext(ctx).Debug(
+						fmt.Sprintf("[MessageProducer.Produce]msg stored in topic(%s)/partition(%d)/offset(%d)",
+							successMsg.Topic, successMsg.Partition, successMsg.Offset,
+						))
+				case errorMsg := <-m.Errors():
+					logger.WithContext(ctx).Error(
+						"[MessageProducer.Produce]failed to produce message",
+						zap.Error(errorMsg.Err),
+					)
+				}
+			}
+		}()
+
+		m.inputCh = m.Input()
+	}
+
 	producerMessage := &sarama.ProducerMessage{
 		Topic: m.topic,
 		Key:   sarama.StringEncoder(fmt.Sprintf(syncMsgFormat, m.topic, msg.Key())),
 		Value: msg,
 	}
 
-	partition, offset, err := m.SendMessage(producerMessage)
-	if err != nil {
-		return ErrProduce.Wrap(err)
-	}
-
-	logger.WithContext(ctx).Debug("[MessageProducer.Produce]" + fmt.Sprintf("msg stored in topic(%s)/partition(%d)/offset(%d)", m.topic, partition, offset))
-
-	return nil
+	m.inputCh <- producerMessage
 }

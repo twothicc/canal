@@ -8,8 +8,8 @@ type RunRequest struct {
 	Pass    string
 	Charset string
 	flavor  string
-	Kafka   config.KafkaConfig
 	Sources []config.SourceConfig
+	Kafka   config.KafkaConfig
 }
 
 type StopRequest struct {

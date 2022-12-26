@@ -23,6 +23,8 @@ type DbConfig struct {
 type KafkaConfig struct {
 	Topic      string   `toml:"topic"`
 	BrokerList []string `toml:"broker_list"`
+	Retry      uint32   `toml:"retry"`
+	Flush      uint32   `toml:"flush"`
 }
 
 type DumpConfig struct {
@@ -31,9 +33,9 @@ type DumpConfig struct {
 
 type Config struct {
 	DbConfig    DbConfig       `toml:"database"`
-	KafkaConfig KafkaConfig    `toml:"kafka"`
 	DumpConfig  DumpConfig     `toml:"dump"`
 	Sources     []SourceConfig `toml:"source"`
+	KafkaConfig KafkaConfig    `toml:"kafka"`
 	ServerId    uint32
 }
 
