@@ -25,7 +25,7 @@ build
 
 # log files
 server.log
-.log
+*.log
 
 # save files
 syncdata
