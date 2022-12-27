@@ -93,11 +93,7 @@ func (se *syncEventHandler) OnRow(e *canal.RowsEvent) error {
 
 	msg, err := se.parseRowsEvent(e)
 	if err == nil {
-		if produceErr := se.msgProducer.Produce(se.ctx, msg); produceErr != nil {
-			logger.WithContext(se.ctx).Error(fmt.Sprintf("[SyncEventHandler.OnRow]%s", produceErr.Error()))
-
-			return ErrProduce.Wrap(err)
-		}
+		se.msgProducer.Produce(se.ctx, msg)
 	}
 
 	return nil
