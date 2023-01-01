@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -187,19 +186,16 @@ func (se *syncEventHandler) parseRowsEvent(e *canal.RowsEvent) (kafka.IMessage, 
 }
 
 func (se *syncEventHandler) parseTimestamp(rawTimestamp interface{}) (uint32, error) {
-	timestampString := fmt.Sprint(rawTimestamp)
-
-	timestamp, err := strconv.ParseUint(timestampString, BASE10, BIT32)
-	if err != nil {
+	timestampFloat, ok := rawTimestamp.(float64)
+	if !ok {
 		logger.WithContext(se.ctx).Error(
 			"[SyncEventHandler.parseTimestamp]fail to parse ctime",
 			zap.Uint32("server id", se.serverId),
-			zap.String("timestamp", timestampString),
-			zap.Error(err),
+			zap.Any("timestamp", rawTimestamp),
 		)
 
-		return 0, ErrParse.New(fmt.Sprintf("[SyncEventHandler.parseTimestamp]%s", err.Error()))
+		return 0, ErrParse.New("[SyncEventHandler.parseTimestamp]fail to parse ctime")
 	}
 
-	return uint32(timestamp), nil
+	return uint32(timestampFloat), nil
 }
