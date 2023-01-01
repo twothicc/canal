@@ -186,7 +186,7 @@ func (se *syncEventHandler) parseRowsEvent(e *canal.RowsEvent) (kafka.IMessage, 
 }
 
 func (se *syncEventHandler) parseTimestamp(rawTimestamp interface{}) (uint32, error) {
-	timestampFloat, ok := rawTimestamp.(float64)
+	timestamp, ok := rawTimestamp.(uint32)
 	if !ok {
 		logger.WithContext(se.ctx).Error(
 			"[SyncEventHandler.parseTimestamp]fail to parse ctime",
@@ -197,5 +197,5 @@ func (se *syncEventHandler) parseTimestamp(rawTimestamp interface{}) (uint32, er
 		return 0, ErrParse.New("[SyncEventHandler.parseTimestamp]fail to parse ctime")
 	}
 
-	return uint32(timestampFloat), nil
+	return timestamp, nil
 }
