@@ -54,15 +54,20 @@ func (m *MessageProducer) Produce(ctx context.Context, msg IMessage) {
 			for {
 				select {
 				case successMsg := <-m.Successes():
-					logger.WithContext(ctx).Debug(
-						fmt.Sprintf("[MessageProducer.Produce]msg stored in topic(%s)/partition(%d)/offset(%d)",
-							successMsg.Topic, successMsg.Partition, successMsg.Offset,
-						))
+					if successMsg != nil {
+						logger.WithContext(ctx).Debug(
+							fmt.Sprintf("[MessageProducer.Produce]msg stored in topic(%s)/partition(%d)/offset(%d)",
+								successMsg.Topic, successMsg.Partition, successMsg.Offset,
+							),
+						)
+					}
 				case errorMsg := <-m.Errors():
-					logger.WithContext(ctx).Error(
-						"[MessageProducer.Produce]failed to produce message",
-						zap.Error(errorMsg.Err),
-					)
+					if errorMsg != nil {
+						logger.WithContext(ctx).Error(
+							"[MessageProducer.Produce]failed to produce message",
+							zap.Error(errorMsg.Err),
+						)
+					}
 				}
 			}
 		}()
